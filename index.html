@@ -49,6 +49,11 @@
     <button id="start">Start</button>
     <button id="pause">Pause</button>
     <button id="restart">Restart</button>
+    <h4>Presets</h4>
+    <button id="presetSoft">Suave</button>
+    <button id="presetHarsh">Hostil</button>
+    <button id="presetDesert">Desierto cálido</button>
+
     <label>
       Tick delay (ms)
       <input id="tickDelay" type="range" min="0" max="500" value="50" />
@@ -57,39 +62,48 @@
     <label>
       Zona 0 regen
       <input id="zone0Regen" type="range" min="0" max="100" value="35" />
+      <span id="zone0RegenLabel"></span>
     </label>
     <label>
       Zona 1 regen
       <input id="zone1Regen" type="range" min="0" max="100" value="60" />
+      <span id="zone1RegenLabel"></span>
     </label>
     <label>
       Zona 2 regen
       <input id="zone2Regen" type="range" min="0" max="100" value="15" />
+      <span id="zone2RegenLabel"></span>
     </label>
 
     <h4>Reproducción</h4>
     <label>
       Umbral energía
       <input id="reproThreshold" type="range" min="50" max="300" value="180" />
+      <span id="reproThresholdLabel"></span>
     </label>
     <label>
       Coste reproducción
       <input id="reproCost" type="range" min="10" max="200" value="90" />
+      <span id="reproCostLabel"></span>
     </label>
     <label>
       Energía al hijo
       <input id="reproChildEnergy" type="range" min="10" max="150" value="50" />
+      <span id="reproChildEnergyLabel"></span>
     </label>
     <label>
       Cooldown (ticks)
       <input id="reproCooldown" type="range" min="1" max="20" value="4" />
+      <span id="reproCooldownLabel"></span>
     </label>
 
     <h4>Estrés térmico</h4>
     <label>
       Intensidad estrés
       <input id="tempStress" type="range" min="1" max="50" value="10" />
+      <span id="tempStressLabel"></span>
     </label>
+
 
     <div id="stats">
       <p>Tick: <span id="tickValue">0</span></p>

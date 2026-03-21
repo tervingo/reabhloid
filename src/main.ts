@@ -8,7 +8,6 @@ const zone2Input = document.getElementById("zone2Temp") as HTMLInputElement;
 
 const canvas = document.getElementById("world") as HTMLCanvasElement;
 const ctx = canvas.getContext("2d")!;
-const restartBtn = document.getElementById("restart") as HTMLButtonElement;
 const tickDelayInput = document.getElementById("tickDelay") as HTMLInputElement;
 const tickSpan = document.getElementById("tickValue") as HTMLSpanElement;
 const popSpan = document.getElementById("popValue") as HTMLSpanElement;
@@ -42,18 +41,59 @@ const reproCooldownInput = document.getElementById("reproCooldown") as HTMLInput
 
 const tempStressInput = document.getElementById("tempStress") as HTMLInputElement;
 
+const zone0RegenLabel = document.getElementById("zone0RegenLabel") as HTMLSpanElement;
+const zone1RegenLabel = document.getElementById("zone1RegenLabel") as HTMLSpanElement;
+const zone2RegenLabel = document.getElementById("zone2RegenLabel") as HTMLSpanElement;
+
+const reproThresholdLabel = document.getElementById("reproThresholdLabel") as HTMLSpanElement;
+const reproCostLabel = document.getElementById("reproCostLabel") as HTMLSpanElement;
+const reproChildEnergyLabel = document.getElementById("reproChildEnergyLabel") as HTMLSpanElement;
+const reproCooldownLabel = document.getElementById("reproCooldownLabel") as HTMLSpanElement;
+
+const tempStressLabel = document.getElementById("tempStressLabel") as HTMLSpanElement;
 
 
 const MAX_HISTORY = 200;
 const popHistory: number[] = [];
-let maxPopSeen = 1;
 
 const CELL_SIZE = canvas.width / GRID_WIDTH;
 
-const startBtn = document.getElementById("start") as HTMLButtonElement;
-const pauseBtn = document.getElementById("pause") as HTMLButtonElement;
-
+let maxPopSeen = 1;
 let world = new World();
+let lastTime = 0;
+let accumulator = 0;
+let tickDelay = Number(tickDelayInput.value);
+let isRunning = false;
+
+tickDelayInput.addEventListener("input", () => {
+  tickDelay = Number(tickDelayInput.value);
+});
+
+
+function updateSliderLabels() {
+  // regen: mostramos valor efectivo (por tick)
+  const r0 = (Number(zone0RegenInput.value) / 1000 * 2);
+  const r1 = (Number(zone1RegenInput.value) / 1000 * 2);
+  const r2 = (Number(zone2RegenInput.value) / 1000 * 2);
+  zone0RegenLabel.textContent = r0.toFixed(3);
+  zone1RegenLabel.textContent = r1.toFixed(3);
+  zone2RegenLabel.textContent = r2.toFixed(3);
+
+  // reproducción
+  const thr = Number(reproThresholdInput.value) / 100;
+  const cost = Number(reproCostInput.value) / 100;
+  const childE = Number(reproChildEnergyInput.value) / 100;
+  const cd = Number(reproCooldownInput.value);
+  reproThresholdLabel.textContent = thr.toFixed(2);
+  reproCostLabel.textContent = cost.toFixed(2);
+  reproChildEnergyLabel.textContent = childE.toFixed(2);
+  reproCooldownLabel.textContent = cd.toString();
+
+  // estrés térmico
+  const stress = Number(tempStressInput.value) / 100;
+  tempStressLabel.textContent = stress.toFixed(2);
+}
+
 
 function updateInspectorFromMouse(event: MouseEvent) {
   const rect = canvas.getBoundingClientRect();
@@ -96,16 +136,6 @@ function updateInspectorFromMouse(event: MouseEvent) {
   }
 }
 
-canvas.addEventListener("mousemove", updateInspectorFromMouse);
-canvas.addEventListener("mouseleave", () => {
-  cellPosSpan.textContent = "-";
-  cellZoneSpan.textContent = "-";
-  cellAliveSpan.textContent = "no";
-  cellTempOptSpan.textContent = "-";
-  cellEnergySpan.textContent = "-";
-  cellAgeSpan.textContent = "-";
-  cellMaxAgeSpan.textContent = "-";
-});
 
 function updateParamsFromUI() {
   // nutriente por zona: slider 0–100 → 0–0.1
@@ -121,6 +151,8 @@ function updateParamsFromUI() {
 
   // estrés térmico: slider 1–50 → 0.01–0.5
   world.tempStressIntensity = Number(tempStressInput.value) / 100;
+
+  updateSliderLabels();
 }
 
 function updateZoneTempsFromUI() {
@@ -138,6 +170,97 @@ function updateZoneTempsFromUI() {
     updateZoneTempsFromUI();
   });
 });
+
+[
+  zone0RegenInput,
+  zone1RegenInput,
+  zone2RegenInput,
+  reproThresholdInput,
+  reproCostInput,
+  reproChildEnergyInput,
+  reproCooldownInput,
+  tempStressInput,
+].forEach(input => {
+  input.addEventListener("input", () => {
+    updateParamsFromUI();
+  });
+});
+
+
+canvas.addEventListener("mousemove", updateInspectorFromMouse);
+canvas.addEventListener("mouseleave", () => {
+  cellPosSpan.textContent = "-";
+  cellZoneSpan.textContent = "-";
+  cellAliveSpan.textContent = "no";
+  cellTempOptSpan.textContent = "-";
+  cellEnergySpan.textContent = "-";
+  cellAgeSpan.textContent = "-";
+  cellMaxAgeSpan.textContent = "-";
+});
+
+function applyPresetSoft() {
+  // temperaturas: frío, templado, cálido moderado
+  zone0Input.value = "20";  // 10 ºC
+  zone1Input.value = "50";  // 25 ºC
+  zone2Input.value = "70";  // 35 ºC
+
+  // regen nutriente (0–100 → 0–0.2 aprox)
+  zone0RegenInput.value = "35";
+  zone1RegenInput.value = "60";
+  zone2RegenInput.value = "15";
+
+  // reproducción
+  reproThresholdInput.value = "180";     // 1.8
+  reproCostInput.value = "90";           // 0.9
+  reproChildEnergyInput.value = "50";    // 0.5
+  reproCooldownInput.value = "4";        // 4 ticks
+
+  // estrés térmico
+  tempStressInput.value = "10";          // 0.10
+
+  updateZoneTempsFromUI();
+  updateParamsFromUI();
+}
+
+function applyPresetHarsh() {
+  zone0Input.value = "10";  // 5 ºC
+  zone1Input.value = "40";  // 20 ºC
+  zone2Input.value = "80";  // 40 ºC
+
+  zone0RegenInput.value = "25";
+  zone1RegenInput.value = "45";
+  zone2RegenInput.value = "10";
+
+  reproThresholdInput.value = "220";     // 2.2
+  reproCostInput.value = "120";          // 1.2
+  reproChildEnergyInput.value = "40";    // 0.4
+  reproCooldownInput.value = "7";        // 7 ticks
+
+  tempStressInput.value = "20";          // 0.20
+
+  updateZoneTempsFromUI();
+  updateParamsFromUI();
+}
+
+function applyPresetDesert() {
+  zone0Input.value = "30";  // 15 ºC
+  zone1Input.value = "60";  // 30 ºC
+  zone2Input.value = "90";  // 45 ºC
+
+  zone0RegenInput.value = "20";
+  zone1RegenInput.value = "30";
+  zone2RegenInput.value = "5";
+
+  reproThresholdInput.value = "190";     // 1.9
+  reproCostInput.value = "95";           // 0.95
+  reproChildEnergyInput.value = "45";    // 0.45
+  reproCooldownInput.value = "5";
+
+  tempStressInput.value = "18";          // 0.18
+
+  updateZoneTempsFromUI();
+  updateParamsFromUI();
+}
 
 updateZoneTempsFromUI();
 updateParamsFromUI();
@@ -186,17 +309,11 @@ function drawPopulationChart() {
   ctx.stroke();
 }
 
-
-let lastTime = 0;
-let accumulator = 0;
-let tickDelay = Number(tickDelayInput.value);
-let isRunning = false;
-
-tickDelayInput.addEventListener("input", () => {
-  tickDelay = Number(tickDelayInput.value);
-});
-
 // BOTONES
+
+const startBtn = document.getElementById("start") as HTMLButtonElement;
+const restartBtn = document.getElementById("restart") as HTMLButtonElement;
+const pauseBtn = document.getElementById("pause") as HTMLButtonElement;
 
 startBtn.addEventListener("click", () => {
   // updateZoneTempsFromUI();
@@ -217,6 +334,32 @@ restartBtn.addEventListener("click", () => {
   updateZoneTempsFromUI();
   updateParamsFromUI();
 });
+
+const presetSoftBtn = document.getElementById("presetSoft") as HTMLButtonElement;
+const presetHarshBtn = document.getElementById("presetHarsh") as HTMLButtonElement;
+const presetDesertBtn = document.getElementById("presetDesert") as HTMLButtonElement;
+
+presetSoftBtn.addEventListener("click", () => {
+  isRunning = false;
+  world = new World();
+  accumulator = 0;
+  applyPresetSoft();
+});
+
+presetHarshBtn.addEventListener("click", () => {
+  isRunning = false;
+  world = new World();
+  accumulator = 0;
+  applyPresetHarsh();
+});
+
+presetDesertBtn.addEventListener("click", () => {
+  isRunning = false;
+  world = new World();
+  accumulator = 0;
+  applyPresetDesert();
+});
+
 
 function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);

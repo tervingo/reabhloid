@@ -107,7 +107,7 @@ export class World {
     }
   }
 
-
+/* 
   private countOrgNeighbors(x: number, y: number): number {
     let count = 0;
     for (let dy = -1; dy <= 1; dy++) {
@@ -121,7 +121,7 @@ export class World {
     }
     return count;
   }
-
+ */
     private updateOrganisms() {
         const newGrid = this.grid.map(row => row.map(cell => ({ ...cell, org: cell.org ? { ...cell.org } : null })));
 

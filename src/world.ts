@@ -57,6 +57,7 @@ export class World {
             tempOpt,
             mutationRate: 0.05,
             reproThreshold: 2.0,
+            reproCooldown: 0,
           };
         }
       }
@@ -116,34 +117,51 @@ export class World {
         const newOrg = newCell.org!;
         newOrg.age += 1;
 
-        // coste basal
-        newOrg.energy -= 0.02;
+        // coste basal: algo mayor si maxAge es alto
+        const longevityFactor = Math.max(0.5, Math.min(2, org.maxAge / 80));
+        newOrg.energy -= 0.015 * longevityFactor;
 
-        // coste por mismatch de temperatura
         const tempDiff = Math.abs(cell.env.temperature - newOrg.tempOpt);
-        newOrg.energy -= tempDiff * 0.05;
+        // curva cuadrática: castigo pequeño cerca del óptimo, fuerte lejos
+        const tempPenalty = tempDiff * tempDiff * 0.3;
+        newOrg.energy -= tempPenalty;
 
         // comer nutriente local
         const eaten = Math.min(cell.env.nutrient, 0.1);
         newCell.env.nutrient -= eaten;
         newOrg.energy += eaten * 0.8;
 
-        // muerte
-        if (newOrg.energy <= 0 || newOrg.age > newOrg.maxAge) {
-          newCell.org = null;
-          continue;
+        // probabilidad de muerte por envejecimiento
+        const ageRatio = newOrg.age / newOrg.maxAge; // 0–1+
+        if (ageRatio > 0.5) {
+        const extraDeathProb = (ageRatio - 0.5) * 0.1; // hasta 5% por tick cerca del final
+        if (Math.random() < extraDeathProb) {
+            newCell.org = null;
+            continue;
+        }
         }
 
-        // reproducción simple asexual
-        if (newOrg.energy > newOrg.reproThreshold) {
-          const pos = this.findEmptyNeighbor(x, y, newGrid);
-          if (pos) {
+        if (newOrg.reproCooldown && newOrg.reproCooldown > 0) {
+          newOrg.reproCooldown -= 1;
+        }
+
+        // reproducción asexual
+        const canReproduce =
+        newOrg.energy > newOrg.reproThreshold &&
+        (newOrg.reproCooldown ?? 0) <= 0 &&
+        newOrg.age > 5; // evitar bebés que se reproducen instantáneamente
+
+        if (canReproduce) {
+        const pos = this.findEmptyNeighbor(x, y, newGrid);
+        if (pos) {
             const [nx, ny] = pos;
             const child = this.mutateOrganism(newOrg);
-            child.energy = newOrg.energy * 0.4;
-            newOrg.energy *= 0.5;
+            const cost = newOrg.energy * 0.6; // coste fuerte
+            child.energy = cost * 0.7;
+            newOrg.energy -= cost;
+            newOrg.reproCooldown = 10 + Math.floor(Math.random() * 10);
             newGrid[ny][nx].org = child;
-          }
+        }
         }
       }
     }
@@ -176,6 +194,7 @@ export class World {
       tempOpt: Math.max(0, Math.min(1, jitter(parent.tempOpt, 0.1))),
       mutationRate: Math.max(0.0, Math.min(0.2, jitter(parent.mutationRate, 0.02))),
       reproThreshold: Math.max(0.5, jitter(parent.reproThreshold, 0.3)),
+      reproCooldown: 0,
     };
   }
   // al final de la clase World

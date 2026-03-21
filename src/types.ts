@@ -17,6 +17,7 @@ export interface Organism {
   tempOpt: number;
   mutationRate: number;
   reproThreshold: number;
+  reproCooldown?: number; // ticks hasta poder reproducirse otra vez
 }
 
 export interface CellState {

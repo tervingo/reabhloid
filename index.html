@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Evolution Sim</title>
+    <style>
+      body { margin: 0; display: flex; height: 100vh; font-family: sans-serif; }
+      #world-container { flex: 1; display: flex; align-items: center; justify-content: center; background: #111; }
+      #world { border: 1px solid #444; image-rendering: pixelated; }
+      #ui { width: 260px; padding: 8px; background: #202020; color: #eee; font-size: 14px; }
+      label { display: block; margin-top: 8px; }
+    </style>
+  </head>
+  <body>
+    <div id="world-container">
+      <canvas id="world" width="500" height="500"></canvas>
+    </div>
+    <div id="ui">
+      <h3>Controls</h3>
+      <button id="restart">Restart</button>
+      <label>
+        Tick delay (ms)
+        <input id="tickDelay" type="range" min="0" max="500" value="50" />
+      </label>
+      <div id="stats">
+          <p>Tick: <span id="tickValue">0</span></p>
+          <p>Population: <span id="popValue">0</span></p>
+      </div>
+      <h4>Población (últimos ticks)</h4>
+      <canvas id="popChart" width="240" height="80"></canvas>
+      <h4>Zonas</h4>
+      <label>
+        Zona 0 (fría)
+        <input id="zone0Temp" type="range" min="0" max="100" value="20" />
+      </label>
+      <label>
+        Zona 1 (templada)
+        <input id="zone1Temp" type="range" min="0" max="100" value="50" />
+      </label>
+      <label>
+        Zona 2 (caliente)
+        <input id="zone2Temp" type="range" min="0" max="100" value="80" />
+      </label>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

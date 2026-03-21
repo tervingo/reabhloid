@@ -1,47 +1,137 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <title>Evolution Sim</title>
-    <style>
-      body { margin: 0; display: flex; height: 100vh; font-family: sans-serif; }
-      #world-container { flex: 1; display: flex; align-items: center; justify-content: center; background: #111; }
-      #world { border: 1px solid #444; image-rendering: pixelated; }
-      #ui { width: 260px; padding: 8px; background: #202020; color: #eee; font-size: 14px; }
-      label { display: block; margin-top: 8px; }
-    </style>
-  </head>
-  <body>
-    <div id="world-container">
-      <canvas id="world" width="500" height="500"></canvas>
+
+<head>
+  <meta charset="UTF-8" />
+  <title>Evolution Sim</title>
+  <style>
+    body {
+      margin: 0;
+      display: flex;
+      height: 100vh;
+      font-family: sans-serif;
+    }
+
+    #world-container {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #111;
+    }
+
+    #world {
+      border: 1px solid #444;
+      image-rendering: pixelated;
+    }
+
+    #ui {
+      width: 260px;
+      padding: 8px;
+      background: #202020;
+      color: #eee;
+      font-size: 14px;
+    }
+
+    label {
+      display: block;
+      margin-top: 8px;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="world-container">
+    <canvas id="world" width="1000" height="1000"></canvas>
+  </div>
+  <div id="ui">
+    <h3>Controles</h3>
+    <button id="start">Start</button>
+    <button id="pause">Pause</button>
+    <button id="restart">Restart</button>
+    <label>
+      Tick delay (ms)
+      <input id="tickDelay" type="range" min="0" max="500" value="50" />
+    </label>
+    <h4>Nutriente por zona</h4>
+    <label>
+      Zona 0 regen
+      <input id="zone0Regen" type="range" min="0" max="100" value="35" />
+    </label>
+    <label>
+      Zona 1 regen
+      <input id="zone1Regen" type="range" min="0" max="100" value="60" />
+    </label>
+    <label>
+      Zona 2 regen
+      <input id="zone2Regen" type="range" min="0" max="100" value="15" />
+    </label>
+
+    <h4>Reproducción</h4>
+    <label>
+      Umbral energía
+      <input id="reproThreshold" type="range" min="50" max="300" value="180" />
+    </label>
+    <label>
+      Coste reproducción
+      <input id="reproCost" type="range" min="10" max="200" value="90" />
+    </label>
+    <label>
+      Energía al hijo
+      <input id="reproChildEnergy" type="range" min="10" max="150" value="50" />
+    </label>
+    <label>
+      Cooldown (ticks)
+      <input id="reproCooldown" type="range" min="1" max="20" value="4" />
+    </label>
+
+    <h4>Estrés térmico</h4>
+    <label>
+      Intensidad estrés
+      <input id="tempStress" type="range" min="1" max="50" value="10" />
+    </label>
+
+    <div id="stats">
+      <p>Tick: <span id="tickValue">0</span></p>
+      <p>Population: <span id="popValue">0</span></p>
     </div>
-    <div id="ui">
-      <h3>Controls</h3>
-      <button id="restart">Restart</button>
-      <label>
-        Tick delay (ms)
-        <input id="tickDelay" type="range" min="0" max="500" value="50" />
-      </label>
-      <div id="stats">
-          <p>Tick: <span id="tickValue">0</span></p>
-          <p>Population: <span id="popValue">0</span></p>
-      </div>
-      <h4>Población (últimos ticks)</h4>
-      <canvas id="popChart" width="240" height="80"></canvas>
-      <h4>Zonas</h4>
-      <label>
-        Zona 0 (fría)
-        <input id="zone0Temp" type="range" min="0" max="100" value="20" />
-      </label>
-      <label>
-        Zona 1 (templada)
-        <input id="zone1Temp" type="range" min="0" max="100" value="50" />
-      </label>
-      <label>
-        Zona 2 (caliente)
-        <input id="zone2Temp" type="range" min="0" max="100" value="80" />
-      </label>
-    </div>
-    <script type="module" src="/src/main.ts"></script>
-  </body>
+    <h4>Rasgos (población viva)</h4>
+    <p>tempOpt media: <span id="tempOptMean">0</span> ºC</p>
+    <p>tempOpt desv: <span id="tempOptStd">0</span> ºC</p>
+    <p>maxAge media: <span id="maxAgeMean">0</span> días</p>
+
+    <h4>Población (últimos ticks)</h4>
+    <canvas id="popChart" width="240" height="80"></canvas>
+    <h4>Zonas</h4>
+    <label>
+      Zona 0 (fría)
+      <input id="zone0Temp" type="range" min="0" max="100" value="20" />
+    </label>
+    <label>
+      Zona 1 (templada)
+      <input id="zone1Temp" type="range" min="0" max="100" value="50" />
+    </label>
+    <label>
+      Zona 2 (caliente)
+      <input id="zone2Temp" type="range" min="0" max="100" value="80" />
+    </label>
+
+    <p>
+      Zona 0: <span id="zone0TempLabel">0</span> ºC<br />
+      Zona 1: <span id="zone1TempLabel">0</span> ºC<br />
+      Zona 2: <span id="zone2TempLabel">0</span> ºC
+    </p>
+    <h4>Inspector celda</h4>
+    <p>Posición: <span id="cellPos">-</span></p>
+    <p>Zona: <span id="cellZone">-</span></p>
+    <p>Viva: <span id="cellAlive">no</span></p>
+    <p>tempOpt: <span id="cellTempOpt">-</span></p>
+    <p>Energía: <span id="cellEnergy">-</span></p>
+    <p>Edad: <span id="cellAge">-</span></p>
+    <p>maxAge: <span id="cellMaxAge">-</span></p>
+  </div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+
 </html>

@@ -6,6 +6,14 @@ export class World {
   grid: CellState[][];
   tickCount = 0;
   zoneBaseTemps: number[] = [0.2, 0.5, 0.8]; // 0–1
+  zoneRegen: number[] = [0.035, 0.06, 0.015];
+
+  reproThreshold = 1.8;
+  reproCost = 0.9;
+  reproChildEnergy = 0.5;
+  reproCooldown = 4;
+
+  tempStressIntensity = 0.1; // coeficiente para el castigo térmico
 
   constructor() {
     this.grid = [];
@@ -56,7 +64,7 @@ export class World {
             maxAge: 80 + Math.floor(Math.random() * 40),
             tempOpt,
             mutationRate: 0.05,
-            reproThreshold: 2.0,
+            reproThreshold: this.reproThreshold,
             reproCooldown: 0,
           };
         }
@@ -78,13 +86,23 @@ export class World {
         const base = this.baseTempForZone(cell.env.zone);
         cell.env.temperature += (base - cell.env.temperature) * 0.01;
 
-        // regen simple de nutriente
-        cell.env.nutrient = Math.min(1, cell.env.nutrient + 0.01);
+/*         // regen simple de nutriente
+        const zoneRegen = [0.012, 0.01, 0.008][cell.env.zone];
+        cell.env.nutrient = Math.min(1, cell.env.nutrient + zoneRegen);
+ */
+        // DEBUG regen simple de nutriente, generosa
+        const regen = this.zoneRegen[cell.env.zone];
+        cell.env.nutrient = Math.min(1, cell.env.nutrient + regen);
 
-        // pequeño calentamiento por densidad local
+
+/*         // pequeño calentamiento por densidad local
         const neighborsOrg = this.countOrgNeighbors(x, y);
         cell.env.temperature += 0.001 * neighborsOrg;
-        cell.env.temperature = Math.max(0, Math.min(1, cell.env.temperature));
+        cell.env.temperature += (Math.random() - 0.5) * 0.002;
+        cell.env.temperature = Math.max(0, Math.min(1, cell.env.temperature)); */
+
+        // DEBUG tender a temperatura base
+        cell.env.temperature += (base - cell.env.temperature) * 0.01;
       }
     }
   }
@@ -104,70 +122,130 @@ export class World {
     return count;
   }
 
-  private updateOrganisms() {
-    const newGrid = this.grid.map(row => row.map(cell => ({ ...cell, org: cell.org ? { ...cell.org } : null })));
+    private updateOrganisms() {
+        const newGrid = this.grid.map(row => row.map(cell => ({ ...cell, org: cell.org ? { ...cell.org } : null })));
 
-    for (let y = 0; y < GRID_HEIGHT; y++) {
-      for (let x = 0; x < GRID_WIDTH; x++) {
-        const cell = this.grid[y][x];
-        const org = cell.org;
-        if (!org) continue;
+        for (let y = 0; y < GRID_HEIGHT; y++) {
+            for (let x = 0; x < GRID_WIDTH; x++) {
+                const cell = this.grid[y][x];
+                const org = cell.org;
+                if (!org) continue;
 
-        const newCell = newGrid[y][x];
-        const newOrg = newCell.org!;
-        newOrg.age += 1;
+                const newCell = newGrid[y][x];
+                const newOrg = newCell.org!;
+                newOrg.age += 1;
 
-        // coste basal: algo mayor si maxAge es alto
-        const longevityFactor = Math.max(0.5, Math.min(2, org.maxAge / 80));
-        newOrg.energy -= 0.015 * longevityFactor;
+                // coste basal igual o ligeramente menor
+ /*                const longevityFactor = Math.max(0.5, Math.min(1.5, org.maxAge / 80));
+                newOrg.energy -= 0.012 * longevityFactor; */
 
-        const tempDiff = Math.abs(cell.env.temperature - newOrg.tempOpt);
-        // curva cuadrática: castigo pequeño cerca del óptimo, fuerte lejos
-        const tempPenalty = tempDiff * tempDiff * 0.3;
-        newOrg.energy -= tempPenalty;
+                newOrg.energy -= 0.01;  // DEBUG Coste basal fijo
 
-        // comer nutriente local
-        const eaten = Math.min(cell.env.nutrient, 0.1);
-        newCell.env.nutrient -= eaten;
-        newOrg.energy += eaten * 0.8;
+/*                 // diferencia térmica
+                const tempDiff = Math.abs(cell.env.temperature - newOrg.tempOpt);
 
-        // probabilidad de muerte por envejecimiento
-        const ageRatio = newOrg.age / newOrg.maxAge; // 0–1+
-        if (ageRatio > 0.5) {
-        const extraDeathProb = (ageRatio - 0.5) * 0.1; // hasta 5% por tick cerca del final
-        if (Math.random() < extraDeathProb) {
-            newCell.org = null;
-            continue;
+                // penalización térmica más suave
+                const tempPenalty = tempDiff * tempDiff * 0.2;
+                newOrg.energy -= tempPenalty; */
+
+                // DEBUG estrés térmico suave
+                const tempDiff = Math.abs(cell.env.temperature - newOrg.tempOpt);
+                const tempPenalty = tempDiff * tempDiff * this.tempStressIntensity;
+                newOrg.energy -= tempPenalty;
+
+ /*                // comer más / mejor
+                const eaten = Math.min(cell.env.nutrient, 0.15);
+                newCell.env.nutrient -= eaten;
+                newOrg.energy += eaten * 0.9;
+ */
+
+                // DEBUG comer: mucho nutriente, alta eficiencia
+                const eaten = Math.min(cell.env.nutrient, 0.2);
+                newCell.env.nutrient -= eaten;
+                newOrg.energy += eaten * 1.0;
+
+/*                 // probabilidad de muerte por envejecimiento
+                const ageRatio = newOrg.age / newOrg.maxAge; // 0–1+
+                if (ageRatio > 0.5) {
+                    const extraDeathProb = (ageRatio - 0.5) * 0.1; // hasta 5% por tick cerca del final
+                    if (Math.random() < extraDeathProb) {
+                        newCell.org = null;
+                        continue;
+                    }
+                } */
+
+                // DEBUG muerte por energía/edad
+
+                if (newOrg.energy <= 0) {
+                    newCell.org = null;
+                    continue;
+                }
+
+                if (newOrg.age > newOrg.maxAge) {
+                    newCell.org = null;
+                    continue;
+                }
+
+
+                if (newOrg.reproCooldown && newOrg.reproCooldown > 0) {
+                    newOrg.reproCooldown -= 1;
+                }
+
+ /*                // reproducción asexual
+                const canReproduce =
+                    newOrg.energy > newOrg.reproThreshold &&
+                    (newOrg.reproCooldown ?? 0) <= 0 &&
+                    newOrg.age > 5; // evitar bebés que se reproducen instantáneamente
+
+                if (canReproduce) {
+                    const pos = this.findEmptyNeighbor(x, y, newGrid);
+                    if (pos) {
+                        const [nx, ny] = pos;
+                        const child = this.mutateOrganism(newOrg);
+
+                        const cost = Math.min(newOrg.energy * 0.4, 1.5); // coste moderado, cap
+                        const energyToChild = cost * 0.8;
+
+                        if (newOrg.energy > cost) {
+                            child.energy = energyToChild;
+                            newOrg.energy -= cost;
+                            newOrg.reproCooldown = 5 + Math.floor(Math.random() * 5);
+                            newGrid[ny][nx].org = child;
+                        }
+                    }
+                } */
+                const canReproduce =
+                newOrg.energy > this.reproThreshold  &&
+                (newOrg.reproCooldown ?? 0) <= 0 &&
+                newOrg.age > 5;
+
+                if (newOrg.reproCooldown && newOrg.reproCooldown > 0) {
+                newOrg.reproCooldown -= 1;
+                }
+
+                if (canReproduce) {
+                const pos = this.findEmptyNeighbor(x, y, newGrid);
+                if (pos) {
+                    const [nx, ny] = pos;
+                    const child = this.mutateOrganism(newOrg);
+
+                    const cost = this.reproCost;
+                    const energyToChild = this.reproChildEnergy;
+
+                    if (newOrg.energy > cost) {
+                    child.energy = energyToChild;
+                    newOrg.energy -= cost;
+                    newOrg.reproCooldown = this.reproCooldown;
+                    newGrid[ny][nx].org = child;
+                    }
+                }
+                }
+
+            }
         }
-        }
 
-        if (newOrg.reproCooldown && newOrg.reproCooldown > 0) {
-          newOrg.reproCooldown -= 1;
-        }
-
-        // reproducción asexual
-        const canReproduce =
-        newOrg.energy > newOrg.reproThreshold &&
-        (newOrg.reproCooldown ?? 0) <= 0 &&
-        newOrg.age > 5; // evitar bebés que se reproducen instantáneamente
-
-        if (canReproduce) {
-        const pos = this.findEmptyNeighbor(x, y, newGrid);
-        if (pos) {
-            const [nx, ny] = pos;
-            const child = this.mutateOrganism(newOrg);
-            const cost = newOrg.energy * 0.6; // coste fuerte
-            child.energy = cost * 0.7;
-            newOrg.energy -= cost;
-            newOrg.reproCooldown = 10 + Math.floor(Math.random() * 10);
-            newGrid[ny][nx].org = child;
-        }
-        }
-      }
+        this.grid = newGrid;
     }
-
-    this.grid = newGrid;
-  }
 
   private findEmptyNeighbor(x: number, y: number, grid: CellState[][]): [number, number] | null {
     const candidates: [number, number][] = [];
@@ -197,6 +275,31 @@ export class World {
       reproCooldown: 0,
     };
   }
+
+  getTraitStats() {
+  const temps: number[] = [];
+  const agesMax: number[] = [];
+
+  for (let y = 0; y < GRID_HEIGHT; y++) {
+    for (let x = 0; x < GRID_WIDTH; x++) {
+      const org = this.grid[y][x].org;
+      if (!org) continue;
+      temps.push(org.tempOpt);
+      agesMax.push(org.maxAge);
+    }
+  }
+
+  const tempStats = meanAndStd(temps);
+  const ageStats = meanAndStd(agesMax);
+
+  return {
+    tempMean: tempStats.mean,
+    tempStd: tempStats.std,
+    maxAgeMean: ageStats.mean,
+    count: temps.length,
+  };
+}
+
   // al final de la clase World
   getPopulation(): number {
     let count = 0;
@@ -209,3 +312,16 @@ export class World {
   }
 
 }
+
+// funciones auxiliares
+
+function meanAndStd(values: number[]): { mean: number; std: number } {
+  if (values.length === 0) return { mean: 0, std: 0 };
+  const mean = values.reduce((s, v) => s + v, 0) / values.length;
+  if (values.length === 1) return { mean, std: 0 };
+  const variance =
+    values.reduce((s, v) => s + (v - mean) * (v - mean), 0) /
+    (values.length - 1);
+  return { mean, std: Math.sqrt(variance) };
+}
+

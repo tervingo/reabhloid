@@ -451,7 +451,30 @@ function draw() {
       if (cell.org) {
         const org = cell.org;
 
-        // Color base según tempOpt
+        // temperatura REAL de la celda en este tick
+        const tEnv = cell.env.temperature;          // 0–1
+        const tOpt = org.tempOpt;                   // 0–1
+
+        const diff = Math.abs(tEnv - tOpt);         // 0 (perfecto) – 1 (horrible)
+        const diffClamped = Math.min(0.5, diff) / 0.5; // 0–1, saturando a partir de diff=0.5
+
+        // verde cuando diff≈0, rojo cuando diff≥0.5
+        const r = Math.round(255 * diffClamped);
+        const g = Math.round(255 * (1 - diffClamped));
+        const b = 40;
+
+        // brillo según energía
+        const e = Math.max(0, Math.min(1, org.energy / 3));
+        const brightness = 0.4 + 0.6 * e;
+
+        const rFinal = Math.round(r * brightness);
+        const gFinal = Math.round(g * brightness);
+        const bFinal = Math.round(b * brightness);
+
+        ctx.fillStyle = `rgb(${rFinal}, ${gFinal}, ${bFinal})`;
+
+
+/*         // Color base según tempOpt
         const tOpt = org.tempOpt;
         const rBase = Math.round(50 + 205 * tOpt);  // 50 +
         const gBase = Math.round(200 - 100 * tOpt);  // 200 - 
@@ -464,7 +487,7 @@ function draw() {
         const r = Math.round(rBase * brightness);
         const g = Math.round(gBase * brightness);
         const b = Math.round(bBase * brightness);
-        ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+        ctx.fillStyle = `rgb(${r}, ${g}, ${b})`; */
 
         const ageRatio = org.maxAge > 0 ? org.age / org.maxAge : 0;
         const cx = x * CELL_SIZE + CELL_SIZE / 2;

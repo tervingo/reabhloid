@@ -462,6 +462,23 @@ function draw() {
           drawCross(ctx, cx, cy, size);
         }
       }
+
+      if (!cell.org && cell.env.lastEatenTicks && cell.env.lastEatenTicks > 0) {
+          const cx = x * CELL_SIZE + CELL_SIZE / 2;
+          const cy = y * CELL_SIZE + CELL_SIZE / 2;
+          const size = CELL_SIZE * 0.35;
+
+          ctx.save();
+          ctx.strokeStyle = "#ff0000"; // rojo
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(cx - size, cy - size);
+          ctx.lineTo(cx + size, cy + size);
+          ctx.moveTo(cx - size, cy + size);
+          ctx.lineTo(cx + size, cy - size);
+          ctx.stroke();
+          ctx.restore();
+      }
     }
   }
   // opcional: grid lines

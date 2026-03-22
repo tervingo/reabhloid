@@ -24,3 +24,10 @@ export interface CellState {
   env: CellEnv;
   org: Organism | null;
 }
+
+export interface CellEnv {
+  temperature: number;
+  nutrient: number;
+  zone: ZoneId;
+  lastEatenTicks?: number; // 0 si nada, >0 si recién comida
+}

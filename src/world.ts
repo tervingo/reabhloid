@@ -32,6 +32,7 @@ export class World {
             temperature: baseTemp,
             nutrient: Math.random() * 1.0,
             zone,
+            lastEatenTicks: 0,
           },
           org: null,
         });
@@ -82,169 +83,146 @@ export class World {
     for (let y = 0; y < GRID_HEIGHT; y++) {
       for (let x = 0; x < GRID_WIDTH; x++) {
         const cell = this.grid[y][x];
+
+        if (cell.env.lastEatenTicks && cell.env.lastEatenTicks > 0) {
+           cell.env.lastEatenTicks -= 1;
+        }
+
         // tender hacia temperatura base de la zona
         const base = this.baseTempForZone(cell.env.zone);
         cell.env.temperature += (base - cell.env.temperature) * 0.01;
 
-/*         // regen simple de nutriente
-        const zoneRegen = [0.012, 0.01, 0.008][cell.env.zone];
-        cell.env.nutrient = Math.min(1, cell.env.nutrient + zoneRegen);
- */
-        // DEBUG regen simple de nutriente, generosa
+        // regen simple de nutriente, generosa
         const regen = this.zoneRegen[cell.env.zone];
         cell.env.nutrient = Math.min(1, cell.env.nutrient + regen);
 
 
-/*         // pequeño calentamiento por densidad local
-        const neighborsOrg = this.countOrgNeighbors(x, y);
-        cell.env.temperature += 0.001 * neighborsOrg;
-        cell.env.temperature += (Math.random() - 0.5) * 0.002;
-        cell.env.temperature = Math.max(0, Math.min(1, cell.env.temperature)); */
-
-        // DEBUG tender a temperatura base
+       // tender a temperatura base
         cell.env.temperature += (base - cell.env.temperature) * 0.01;
       }
     }
   }
 
-/* 
-  private countOrgNeighbors(x: number, y: number): number {
-    let count = 0;
-    for (let dy = -1; dy <= 1; dy++) {
-      for (let dx = -1; dx <= 1; dx++) {
-        if (dx === 0 && dy === 0) continue;
-        const nx = x + dx;
-        const ny = y + dy;
-        if (nx < 0 || ny < 0 || nx >= GRID_WIDTH || ny >= GRID_HEIGHT) continue;
-        if (this.grid[ny][nx].org) count++;
-      }
-    }
-    return count;
-  }
- */
-    private updateOrganisms() {
-        const newGrid = this.grid.map(row => row.map(cell => ({ ...cell, org: cell.org ? { ...cell.org } : null })));
+    private findWeakerNeighbor(
+      x: number,
+      y: number,
+      grid: CellState[][],
+      energyA: number
+    ): [number, number] | null {
+      const candidates: [number, number][] = [];
 
-        for (let y = 0; y < GRID_HEIGHT; y++) {
-            for (let x = 0; x < GRID_WIDTH; x++) {
-                const cell = this.grid[y][x];
-                const org = cell.org;
-                if (!org) continue;
-
-                const newCell = newGrid[y][x];
-                const newOrg = newCell.org!;
-                newOrg.age += 1;
-
-                // coste basal igual o ligeramente menor
- /*                const longevityFactor = Math.max(0.5, Math.min(1.5, org.maxAge / 80));
-                newOrg.energy -= 0.012 * longevityFactor; */
-
-                newOrg.energy -= 0.01;  // DEBUG Coste basal fijo
-
-/*                 // diferencia térmica
-                const tempDiff = Math.abs(cell.env.temperature - newOrg.tempOpt);
-
-                // penalización térmica más suave
-                const tempPenalty = tempDiff * tempDiff * 0.2;
-                newOrg.energy -= tempPenalty; */
-
-                // DEBUG estrés térmico suave
-                const tempDiff = Math.abs(cell.env.temperature - newOrg.tempOpt);
-                const tempPenalty = tempDiff * tempDiff * this.tempStressIntensity;
-                newOrg.energy -= tempPenalty;
-
- /*                // comer más / mejor
-                const eaten = Math.min(cell.env.nutrient, 0.15);
-                newCell.env.nutrient -= eaten;
-                newOrg.energy += eaten * 0.9;
- */
-
-                // DEBUG comer: mucho nutriente, alta eficiencia
-                const eaten = Math.min(cell.env.nutrient, 0.2);
-                newCell.env.nutrient -= eaten;
-                newOrg.energy += eaten * 1.0;
-
-/*                 // probabilidad de muerte por envejecimiento
-                const ageRatio = newOrg.age / newOrg.maxAge; // 0–1+
-                if (ageRatio > 0.5) {
-                    const extraDeathProb = (ageRatio - 0.5) * 0.1; // hasta 5% por tick cerca del final
-                    if (Math.random() < extraDeathProb) {
-                        newCell.org = null;
-                        continue;
-                    }
-                } */
-
-                // DEBUG muerte por energía/edad
-
-                if (newOrg.energy <= 0) {
-                    newCell.org = null;
-                    continue;
-                }
-
-                if (newOrg.age > newOrg.maxAge) {
-                    newCell.org = null;
-                    continue;
-                }
-
-
-                if (newOrg.reproCooldown && newOrg.reproCooldown > 0) {
-                    newOrg.reproCooldown -= 1;
-                }
-
- /*                // reproducción asexual
-                const canReproduce =
-                    newOrg.energy > newOrg.reproThreshold &&
-                    (newOrg.reproCooldown ?? 0) <= 0 &&
-                    newOrg.age > 5; // evitar bebés que se reproducen instantáneamente
-
-                if (canReproduce) {
-                    const pos = this.findEmptyNeighbor(x, y, newGrid);
-                    if (pos) {
-                        const [nx, ny] = pos;
-                        const child = this.mutateOrganism(newOrg);
-
-                        const cost = Math.min(newOrg.energy * 0.4, 1.5); // coste moderado, cap
-                        const energyToChild = cost * 0.8;
-
-                        if (newOrg.energy > cost) {
-                            child.energy = energyToChild;
-                            newOrg.energy -= cost;
-                            newOrg.reproCooldown = 5 + Math.floor(Math.random() * 5);
-                            newGrid[ny][nx].org = child;
-                        }
-                    }
-                } */
-                const canReproduce =
-                newOrg.energy > this.reproThreshold  &&
-                (newOrg.reproCooldown ?? 0) <= 0 &&
-                newOrg.age > 5;
-
-                if (newOrg.reproCooldown && newOrg.reproCooldown > 0) {
-                newOrg.reproCooldown -= 1;
-                }
-
-                if (canReproduce) {
-                const pos = this.findEmptyNeighbor(x, y, newGrid);
-                if (pos) {
-                    const [nx, ny] = pos;
-                    const child = this.mutateOrganism(newOrg);
-
-                    const cost = this.reproCost;
-                    const energyToChild = this.reproChildEnergy;
-
-                    if (newOrg.energy > cost) {
-                    child.energy = energyToChild;
-                    newOrg.energy -= cost;
-                    newOrg.reproCooldown = this.reproCooldown;
-                    newGrid[ny][nx].org = child;
-                    }
-                }
-                }
-
-            }
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          if (dx === 0 && dy === 0) continue;
+          const nx = x + dx;
+          const ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= GRID_WIDTH || ny >= GRID_HEIGHT) continue;
+          const orgB = grid[ny][nx].org;
+          if (!orgB) continue;
+          if (orgB.energy < energyA) {
+            candidates.push([nx, ny]);
+          }
         }
+      }
 
-        this.grid = newGrid;
+      if (candidates.length === 0) return null;
+      // elige una víctima aleatoria entre las débiles
+      return candidates[Math.floor(Math.random() * candidates.length)];
+    }
+
+    private updateOrganisms() {
+      const newGrid = this.grid.map(row =>
+        row.map(cell => ({ ...cell, org: cell.org ? { ...cell.org } : null }))
+      );
+
+      for (let y = 0; y < GRID_HEIGHT; y++) {
+        for (let x = 0; x < GRID_WIDTH; x++) {
+          const cell = this.grid[y][x];
+          const org = cell.org;
+          if (!org) continue;
+
+          const newCell = newGrid[y][x];
+          let newOrg = newCell.org;
+          if (!newOrg) continue; // por seguridad
+
+          // 1) edad
+          newOrg.age += 1;
+
+          // 2) coste basal
+          newOrg.energy -= 0.01;
+
+          // 3) estrés térmico
+          const tempDiff = Math.abs(cell.env.temperature - newOrg.tempOpt);
+          const tempPenalty = tempDiff * tempDiff * this.tempStressIntensity;
+          newOrg.energy -= tempPenalty;
+
+          // 4) comer
+          const eaten = Math.min(cell.env.nutrient, 0.2);
+          newCell.env.nutrient -= eaten;
+          newOrg.energy += eaten * 1.0;
+
+          // 5) muerte por energía/edad
+          if (newOrg.energy <= 0 || newOrg.age > newOrg.maxAge) {
+            newCell.org = null;
+            continue;
+          }
+
+          // podría haber sido modificado por otra lógica, recarga referencia
+          newOrg = newCell.org;
+          if (!newOrg) continue;
+
+          // 6) cooldown reproducción
+          if (newOrg.reproCooldown && newOrg.reproCooldown > 0) {
+            newOrg.reproCooldown -= 1;
+          }
+
+          // 7) predación
+          const hungerThreshold = 1;
+          if (newOrg.energy < hungerThreshold) {
+            const victimPos = this.findWeakerNeighbor(x, y, newGrid, newOrg.energy);
+            if (victimPos) {
+              const [vx, vy] = victimPos;
+              const victimCell = newGrid[vy][vx];
+              const victim = victimCell.org;
+              if (victim) {
+                const gained = victim.energy * 0.7;
+                newOrg.energy += gained;
+                victimCell.org = null;
+                victimCell.env.lastEatenTicks = 5; // mostrar X roja durante 5 ticks
+              }
+            }
+          }
+
+          // recarga referencia por si acaso
+          newOrg = newCell.org;
+          if (!newOrg) continue;
+
+          // 8) reproducción
+          const canReproduce =
+            newOrg.energy > this.reproThreshold &&
+            (newOrg.reproCooldown ?? 0) <= 0 &&
+            newOrg.age > 5;
+
+          if (canReproduce) {
+            const pos = this.findEmptyNeighbor(x, y, newGrid);
+            if (pos) {
+              const [nx, ny] = pos;
+              const child = this.mutateOrganism(newOrg);
+              const cost = this.reproCost;
+              const energyToChild = this.reproChildEnergy;
+
+              if (newOrg.energy > cost) {
+                child.energy = energyToChild;
+                newOrg.energy -= cost;
+                newOrg.reproCooldown = this.reproCooldown;
+                newGrid[ny][nx].org = child;
+              }
+            }
+          }
+        }
+      }
+
+      this.grid = newGrid;
     }
 
   private findEmptyNeighbor(x: number, y: number, grid: CellState[][]): [number, number] | null {

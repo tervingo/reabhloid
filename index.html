@@ -10,6 +10,8 @@
       display: flex;
       height: 100vh;
       font-family: sans-serif;
+      background: #111;
+      color: #eee;
     }
 
     #world-container {
@@ -17,7 +19,6 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      background: #111;
     }
 
     #world {
@@ -26,126 +27,185 @@
     }
 
     #ui {
-      width: 260px;
+      width: 500px;
       padding: 8px;
       background: #202020;
-      color: #eee;
-      font-size: 14px;
+      display: flex;
+      flex-direction: column;
+      box-sizing: border-box;
+      overflow-y: auto;
+    }
+
+    #ui-columns {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-column-gap: 12px;
+      align-items: flex-start;
+    }
+
+    .ui-col {
+      font-size: 13px;
+    }
+
+    .ui-left {
+      border-right: 1px solid #444;
+      padding-right: 8px;
+    }
+
+    .ui-right {
+      padding-left: 8px;
+    }
+
+    h2 {
+      margin: 6px 0;
+      color: chartreuse;
+    }
+
+    h3 {
+      margin: 6px 0;
+      color: orangeRed;
     }
 
     label {
       display: block;
-      margin-top: 8px;
+      margin-top: 6px;
+    }
+
+    input[type="range"] {
+      width: 100%;
+    }
+
+    button {
+      margin-right: 4px;
+      margin-bottom: 4px;
+    }
+
+    p {
+      margin: 2px 0;
     }
   </style>
+
 </head>
 
 <body>
   <div id="world-container">
     <canvas id="world" width="1000" height="1000"></canvas>
   </div>
+
   <div id="ui">
-    <h3>Controles</h3>
-    <button id="start">Start</button>
-    <button id="pause">Pause</button>
-    <button id="restart">Restart</button>
-    <h4>Presets</h4>
-    <button id="presetSoft">Suave</button>
-    <button id="presetHarsh">Hostil</button>
-    <button id="presetDesert">Desierto cálido</button>
+    <div id="ui-columns">
+      <div class="ui-col ui-left">
+        <h2>Inspector celda</h2>
+        <p>--------------------</p>
+        <p>Posición: <span id="cellPos">-</span></p>
+        <p>Nutriente: <span id="cellNutrient">-</span></p>
+        <p>Zona: <span id="cellZone">-</span></p>
+        <p>Viva: <span id="cellAlive">no</span></p>
+        <p>tempOpt: <span id="cellTempOpt">-</span></p>
+        <p>Energía: <span id="cellEnergy">-</span></p>
+        <p>Edad: <span id="cellAge">-</span></p>
+        <p>maxAge: <span id="cellMaxAge">-</span></p>
+      </div>
 
-    <label>
-      Tick delay (ms)
-      <input id="tickDelay" type="range" min="0" max="500" value="50" />
-    </label>
-    <h4>Nutriente por zona</h4>
-    <label>
-      Zona 0 regen
-      <input id="zone0Regen" type="range" min="0" max="100" value="35" />
-      <span id="zone0RegenLabel"></span>
-    </label>
-    <label>
-      Zona 1 regen
-      <input id="zone1Regen" type="range" min="0" max="100" value="60" />
-      <span id="zone1RegenLabel"></span>
-    </label>
-    <label>
-      Zona 2 regen
-      <input id="zone2Regen" type="range" min="0" max="100" value="15" />
-      <span id="zone2RegenLabel"></span>
-    </label>
+      <div class="ui-col ui-right">
+        <h2>Controls</h2>
+        <p>--------------------</p>
+         <button id="start">Start</button>
+        <button id="pause">Pause</button>
+        <button id="step">Step</button>
+        <button id="restart">Restart</button>
+        <label>
+          Tick delay (ms)
+          <input id="tickDelay" type="range" min="0" max="500" value="200" />
+        </label>
 
-    <h4>Reproducción</h4>
-    <label>
-      Umbral energía
-      <input id="reproThreshold" type="range" min="50" max="300" value="180" />
-      <span id="reproThresholdLabel"></span>
-    </label>
-    <label>
-      Coste reproducción
-      <input id="reproCost" type="range" min="10" max="200" value="90" />
-      <span id="reproCostLabel"></span>
-    </label>
-    <label>
-      Energía al hijo
-      <input id="reproChildEnergy" type="range" min="10" max="150" value="50" />
-      <span id="reproChildEnergyLabel"></span>
-    </label>
-    <label>
-      Cooldown (ticks)
-      <input id="reproCooldown" type="range" min="1" max="20" value="4" />
-      <span id="reproCooldownLabel"></span>
-    </label>
+        <h3>Estado global</h3>
+        <div id="stats">
+          <p>Tick: <span id="tickValue">0</span></p>
+          <p>Población: <span id="popValue">0</span></p>
+          <p>tempOpt media: <span id="tempOptMean">0</span> ºC</p>
+          <p>tempOpt desv: <span id="tempOptStd">0</span> ºC</p>
+          <p>maxAge media: <span id="maxAgeMean">0</span> días</p>
+        </div>
 
-    <h4>Estrés térmico</h4>
-    <label>
-      Intensidad estrés
-      <input id="tempStress" type="range" min="1" max="50" value="10" />
-      <span id="tempStressLabel"></span>
-    </label>
+        <h3>Población (últimos ticks)</h3>
+        <canvas id="popChart" width="240" height="80"></canvas>
 
+        <h3>Zonas (temperatura)</h3>
+        <label>
+          Zona 0 (fría)
+          <input id="zone0Temp" type="range" min="0" max="100" value="20" />
+        </label>
+        <label>
+          Zona 1 (templada)
+          <input id="zone1Temp" type="range" min="0" max="100" value="50" />
+        </label>
+        <label>
+          Zona 2 (caliente)
+          <input id="zone2Temp" type="range" min="0" max="100" value="80" />
+        </label>
+        <p>
+          Zona 0: <span id="zone0TempLabel">0</span> ºC<br />
+          Zona 1: <span id="zone1TempLabel">0</span> ºC<br />
+          Zona 2: <span id="zone2TempLabel">0</span> ºC
+        </p>
 
-    <div id="stats">
-      <p>Tick: <span id="tickValue">0</span></p>
-      <p>Population: <span id="popValue">0</span></p>
+        <h3>Nutriente por zona</h3>
+        <label>
+          Zona 0 regen
+          <input id="zone0Regen" type="range" min="0" max="100" value="35" />
+          <span id="zone0RegenLabel"></span>
+        </label>
+        <label>
+          Zona 1 regen
+          <input id="zone1Regen" type="range" min="0" max="100" value="60" />
+          <span id="zone1RegenLabel"></span>
+        </label>
+        <label>
+          Zona 2 regen
+          <input id="zone2Regen" type="range" min="0" max="100" value="15" />
+          <span id="zone2RegenLabel"></span>
+        </label>
+
+        <h3>Reproducción</h3>
+        <label>
+          Umbral energía
+          <input id="reproThreshold" type="range" min="50" max="300" value="180" />
+          <span id="reproThresholdLabel"></span>
+        </label>
+        <label>
+          Coste reproducción
+          <input id="reproCost" type="range" min="10" max="200" value="90" />
+          <span id="reproCostLabel"></span>
+        </label>
+        <label>
+          Energía al hijo
+          <input id="reproChildEnergy" type="range" min="10" max="150" value="50" />
+          <span id="reproChildEnergyLabel"></span>
+        </label>
+        <label>
+          Cooldown (ticks)
+          <input id="reproCooldown" type="range" min="1" max="20" value="4" />
+          <span id="reproCooldownLabel"></span>
+        </label>
+
+        <h3>Estrés térmico</h3>
+        <label>
+          Intensidad estrés
+          <input id="tempStress" type="range" min="1" max="50" value="10" />
+          <span id="tempStressLabel"></span>
+        </label>
+
+        <h3>Presets</h3>
+        <button id="presetSoft">Suave</button>
+        <button id="presetHarsh">Hostil</button>
+        <button id="presetDesert">Desierto cálido</button>
+      </div>
     </div>
-    <h4>Rasgos (población viva)</h4>
-    <p>tempOpt media: <span id="tempOptMean">0</span> ºC</p>
-    <p>tempOpt desv: <span id="tempOptStd">0</span> ºC</p>
-    <p>maxAge media: <span id="maxAgeMean">0</span> días</p>
-
-    <h4>Población (últimos ticks)</h4>
-    <canvas id="popChart" width="240" height="80"></canvas>
-    <h4>Zonas</h4>
-    <label>
-      Zona 0 (fría)
-      <input id="zone0Temp" type="range" min="0" max="100" value="20" />
-    </label>
-    <label>
-      Zona 1 (templada)
-      <input id="zone1Temp" type="range" min="0" max="100" value="50" />
-    </label>
-    <label>
-      Zona 2 (caliente)
-      <input id="zone2Temp" type="range" min="0" max="100" value="80" />
-    </label>
-
-    <p>
-      Zona 0: <span id="zone0TempLabel">0</span> ºC<br />
-      Zona 1: <span id="zone1TempLabel">0</span> ºC<br />
-      Zona 2: <span id="zone2TempLabel">0</span> ºC
-    </p>
-    <h4>Inspector celda</h4>
-    <p>Posición: <span id="cellPos">-</span></p>
-    <p>Zona: <span id="cellZone">-</span></p>
-    <p>Viva: <span id="cellAlive">no</span></p>
-    <p>tempOpt: <span id="cellTempOpt">-</span></p>
-    <p>Energía: <span id="cellEnergy">-</span></p>
-    <p>Edad: <span id="cellAge">-</span></p>
-    <p>maxAge: <span id="cellMaxAge">-</span></p>
   </div>
 
   <script type="module" src="/src/main.ts"></script>
 </body>
+
 
 </html>

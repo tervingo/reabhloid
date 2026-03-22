@@ -52,6 +52,8 @@ const reproCooldownLabel = document.getElementById("reproCooldownLabel") as HTML
 
 const tempStressLabel = document.getElementById("tempStressLabel") as HTMLSpanElement;
 
+const cellNutrientSpan = document.getElementById("cellNutrient") as HTMLSpanElement;
+
 
 const MAX_HISTORY = 200;
 const popHistory: number[] = [];
@@ -115,6 +117,7 @@ function updateInspectorFromMouse(event: MouseEvent) {
   }
 
   const cell = world.grid[y][x];
+  cellNutrientSpan.textContent = cell.env.nutrient.toFixed(3);
   cellPosSpan.textContent = `${x}, ${y}`;
   cellZoneSpan.textContent = cell.env.zone.toString();
 
@@ -314,6 +317,8 @@ function drawPopulationChart() {
 const startBtn = document.getElementById("start") as HTMLButtonElement;
 const restartBtn = document.getElementById("restart") as HTMLButtonElement;
 const pauseBtn = document.getElementById("pause") as HTMLButtonElement;
+const stepBtn = document.getElementById("step") as HTMLButtonElement;
+
 
 startBtn.addEventListener("click", () => {
   // updateZoneTempsFromUI();
@@ -334,6 +339,32 @@ restartBtn.addEventListener("click", () => {
   updateZoneTempsFromUI();
   updateParamsFromUI();
 });
+
+stepBtn.addEventListener("click", () => {
+  // Forzar pausa para no mezclar con el loop continuo
+  isRunning = false;
+
+  // Avanzar un tick fijo
+  world.step();
+
+  // Actualizar visualización (igual que hace loop)
+  draw();
+
+  const pop = world.getPopulation();
+  tickSpan.textContent = world.tickCount.toString();
+  popSpan.textContent = pop.toString();
+
+  const traits = world.getTraitStats();
+  tempOptMeanSpan.textContent = (traits.tempMean * 50).toFixed(1); // ºC
+  tempOptStdSpan.textContent = (traits.tempStd * 50).toFixed(1);   // ºC
+  const daysPerTick = 1 / 24;
+  const maxAgeDays = traits.maxAgeMean * daysPerTick;
+  maxAgeMeanSpan.textContent = maxAgeDays.toFixed(1);
+
+  recordPopulation(pop);
+  drawPopulationChart();
+});
+
 
 const presetSoftBtn = document.getElementById("presetSoft") as HTMLButtonElement;
 const presetHarshBtn = document.getElementById("presetHarsh") as HTMLButtonElement;
@@ -367,13 +398,33 @@ function draw() {
   for (let y = 0; y < GRID_HEIGHT; y++) {
     for (let x = 0; x < GRID_WIDTH; x++) {
       const cell = world.grid[y][x];
+      const n = cell.env.nutrient; // 0–1
 
-      // 1) Fondo por temperatura
-      const t = cell.env.temperature; // 0-1
-      const rBg = Math.round(50 + 150 * t);
-      const bBg = Math.round(200 - 150 * t);
-      ctx.fillStyle = `rgb(${rBg}, 30, ${bBg})`;
+      let rBg = 0;
+      let gBg = 0;
+      let bBg = 0;
+
+      switch (cell.env.zone) {
+        case 0: // fría: azul
+          rBg = 0;
+          gBg = Math.round(20 + 40 * n);   // un poco de verde
+          bBg = Math.round(60 + 180 * n);  // azul más intenso con nutriente
+          break;
+        case 1: // templada: verde
+          rBg = Math.round(20 + 40 * n);
+          gBg = Math.round(80 + 170 * n);  // verde fuerte con nutriente
+          bBg = Math.round(20 + 40 * n);
+          break;
+        case 2: // cálida: roja
+          rBg = Math.round(80 + 170 * n);  // rojo fuerte con nutriente
+          gBg = Math.round(20 + 40 * n);
+          bBg = Math.round(20 + 40 * n);
+          break;
+      }
+
+      ctx.fillStyle = `rgb(${rBg}, ${gBg}, ${bBg})`;
       ctx.fillRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+
 
       // 2) Organismo (si lo hay)
       if (cell.org) {
@@ -394,17 +445,22 @@ function draw() {
         const b = Math.round(bBase * brightness);
         ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
 
-        // Tamaño según edad
-        const ageRatio = Math.min(1, org.age / org.maxAge);
-        const margin = 1 + (1 - ageRatio) * 2;
-        const size = CELL_SIZE - margin * 2;
+        const ageRatio = org.maxAge > 0 ? org.age / org.maxAge : 0;
+        const cx = x * CELL_SIZE + CELL_SIZE / 2;
+        const cy = y * CELL_SIZE + CELL_SIZE / 2;
+        const size = CELL_SIZE * 0.35; // radio/semilado base
 
-        ctx.fillRect(
-          x * CELL_SIZE + margin,
-          y * CELL_SIZE + margin,
-          size,
-          size
-        );
+        if (org.age <= 10) {
+          drawStar(ctx, cx, cy, size);
+        } else if (ageRatio <= 0.33) {
+          drawCircle(ctx, cx, cy, size);
+        } else if (ageRatio <= 0.66) {
+          drawSquare(ctx, cx, cy, size);
+        } else if (ageRatio <= 0.9) {
+          drawTriangle(ctx, cx, cy, size);
+        } else {
+          drawCross(ctx, cx, cy, size);
+        }
       }
     }
   }
@@ -424,6 +480,63 @@ function draw() {
     ctx.stroke();
   }
 }
+
+function drawCircle(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) {
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawSquare(ctx: CanvasRenderingContext2D, cx: number, cy: number, half: number) {
+  ctx.fillRect(cx - half, cy - half, half * 2, half * 2);
+}
+
+function drawTriangle(ctx: CanvasRenderingContext2D, cx: number, cy: number, size: number) {
+  const h = size * Math.sqrt(3);
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - h / 2);
+  ctx.lineTo(cx - size, cy + h / 2);
+  ctx.lineTo(cx + size, cy + h / 2);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function drawCross(ctx: CanvasRenderingContext2D, cx: number, cy: number, size: number) {
+  const half = size;
+  ctx.save();
+  ctx.strokeStyle = "#ffffff"; // blanco
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(cx - half, cy - half);
+  ctx.lineTo(cx + half, cy + half);
+  ctx.moveTo(cx - half, cy + half);
+  ctx.lineTo(cx + half, cy - half);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawStar(ctx: CanvasRenderingContext2D, cx: number, cy: number, outerR: number) {
+  const innerR = outerR * 0.5;
+  const spikes = 5;
+  let rot = -Math.PI / 2;
+  const step = Math.PI / spikes;
+  ctx.fillStyle = "#7fff00"; // chartreuse
+  ctx.beginPath();
+  for (let i = 0; i < spikes; i++) {
+    const xOuter = cx + Math.cos(rot) * outerR;
+    const yOuter = cy + Math.sin(rot) * outerR;
+    ctx.lineTo(xOuter, yOuter);
+    rot += step;
+
+    const xInner = cx + Math.cos(rot) * innerR;
+    const yInner = cy + Math.sin(rot) * innerR;
+    ctx.lineTo(xInner, yInner);
+    rot += step;
+  }
+  ctx.closePath();
+  ctx.fill();
+}
+
 
 function loop(timestamp: number) {
   const dt = timestamp - lastTime;

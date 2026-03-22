@@ -60,6 +60,9 @@ const popHistory: number[] = [];
 
 const CELL_SIZE = canvas.width / GRID_WIDTH;
 
+const INFO_BAR_HEIGHT = 40;
+
+
 let maxPopSeen = 1;
 let world = new World();
 let lastTime = 0;
@@ -395,6 +398,20 @@ presetDesertBtn.addEventListener("click", () => {
 function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+  // barra superior
+  ctx.fillStyle = "#000000";
+  ctx.fillRect(0, 0, canvas.width, INFO_BAR_HEIGHT);
+
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "20px monospace";
+  ctx.textBaseline = "middle";
+
+  const tickText = `Tick: ${world.tickCount}`;
+  const popText = `Pop: ${world.getPopulation()}`;
+
+  ctx.fillText(tickText, 6, INFO_BAR_HEIGHT / 2);
+  ctx.fillText(popText, 140, INFO_BAR_HEIGHT / 2);
+
   for (let y = 0; y < GRID_HEIGHT; y++) {
     for (let x = 0; x < GRID_WIDTH; x++) {
       const cell = world.grid[y][x];
@@ -423,8 +440,12 @@ function draw() {
       }
 
       ctx.fillStyle = `rgb(${rBg}, ${gBg}, ${bBg})`;
-      ctx.fillRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
-
+      ctx.fillRect(
+        x * CELL_SIZE,
+        INFO_BAR_HEIGHT + y * CELL_SIZE,
+        CELL_SIZE,
+        CELL_SIZE
+      );
 
       // 2) Organismo (si lo hay)
       if (cell.org) {
@@ -432,9 +453,9 @@ function draw() {
 
         // Color base según tempOpt
         const tOpt = org.tempOpt;
-        const rBase = Math.round(50 + 205 * tOpt);
-        const gBase = Math.round(200 - 100 * tOpt);
-        const bBase = 0;
+        const rBase = Math.round(50 + 205 * tOpt);  // 50 +
+        const gBase = Math.round(200 - 100 * tOpt);  // 200 - 
+        const bBase = Math.round(200 - 100 * tOpt);  // 0 
 
         // Brillo según energía
         const e = Math.max(0, Math.min(1, org.energy / 3));
@@ -447,7 +468,7 @@ function draw() {
 
         const ageRatio = org.maxAge > 0 ? org.age / org.maxAge : 0;
         const cx = x * CELL_SIZE + CELL_SIZE / 2;
-        const cy = y * CELL_SIZE + CELL_SIZE / 2;
+        const cy = INFO_BAR_HEIGHT + y * CELL_SIZE + CELL_SIZE / 2;
         const size = CELL_SIZE * 0.35; // radio/semilado base
 
         if (org.age <= 10) {
@@ -465,11 +486,11 @@ function draw() {
 
       if (!cell.org && cell.env.lastEatenTicks && cell.env.lastEatenTicks > 0) {
           const cx = x * CELL_SIZE + CELL_SIZE / 2;
-          const cy = y * CELL_SIZE + CELL_SIZE / 2;
+          const cy = INFO_BAR_HEIGHT + y * CELL_SIZE + CELL_SIZE / 2;
           const size = CELL_SIZE * 0.35;
 
           ctx.save();
-          ctx.strokeStyle = "#ff0000"; // rojo
+          ctx.strokeStyle = "orangeRed";
           ctx.lineWidth = 2;
           ctx.beginPath();
           ctx.moveTo(cx - size, cy - size);

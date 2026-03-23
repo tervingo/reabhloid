@@ -67,6 +67,7 @@ export class World {
             mutationRate: 0.05,
             reproThreshold: this.reproThreshold,
             reproCooldown: 0,
+            isPredator: Math.random() < 0.15, // 15% depredadores
           };
         }
       }
@@ -103,34 +104,7 @@ export class World {
     }
   }
 
-    private findWeakerNeighbor(
-      x: number,
-      y: number,
-      grid: CellState[][],
-      energyA: number
-    ): [number, number] | null {
-      const candidates: [number, number][] = [];
-
-      for (let dy = -1; dy <= 1; dy++) {
-        for (let dx = -1; dx <= 1; dx++) {
-          if (dx === 0 && dy === 0) continue;
-          const nx = x + dx;
-          const ny = y + dy;
-          if (nx < 0 || ny < 0 || nx >= GRID_WIDTH || ny >= GRID_HEIGHT) continue;
-          const orgB = grid[ny][nx].org;
-          if (!orgB) continue;
-          if (orgB.energy < energyA) {
-            candidates.push([nx, ny]);
-          }
-        }
-      }
-
-      if (candidates.length === 0) return null;
-      // elige una víctima aleatoria entre las débiles
-      return candidates[Math.floor(Math.random() * candidates.length)];
-    }
-
-    private updateOrganisms() {
+     private updateOrganisms() {
       const newGrid = this.grid.map(row =>
         row.map(cell => ({ ...cell, org: cell.org ? { ...cell.org } : null }))
       );
@@ -176,22 +150,23 @@ export class World {
             newOrg.reproCooldown -= 1;
           }
 
-          // 7) predación
-          const hungerThreshold = 1;
-          if (newOrg.energy < hungerThreshold) {
+          // Predación: sólo depredadores, sólo si hambrientos, y sólo presas no depredadoras
+          const hungerThreshold = 0.9;
+          if (newOrg.isPredator && newOrg.energy < hungerThreshold) {
             const victimPos = this.findWeakerNeighbor(x, y, newGrid, newOrg.energy);
             if (victimPos) {
               const [vx, vy] = victimPos;
               const victimCell = newGrid[vy][vx];
               const victim = victimCell.org;
-              if (victim) {
+              if (victim && !victim.isPredator) { // no canibalismo (de momento)
                 const gained = victim.energy * 0.7;
                 newOrg.energy += gained;
                 victimCell.org = null;
-                victimCell.env.lastEatenTicks = 5; // mostrar X roja durante 5 ticks
+                victimCell.env.lastEatenTicks = 5;
               }
             }
           }
+
 
           // recarga referencia por si acaso
           newOrg = newCell.org;
@@ -240,6 +215,32 @@ export class World {
     return candidates[Math.floor(Math.random() * candidates.length)];
   }
 
+  private findWeakerNeighbor(
+    x: number,
+    y: number,
+    grid: CellState[][],
+    energyA: number
+  ): [number, number] | null {
+    const candidates: [number, number][] = [];
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        if (dx === 0 && dy === 0) continue;
+        const nx = x + dx;
+        const ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= GRID_WIDTH || ny >= GRID_HEIGHT) continue;
+        const orgB = grid[ny][nx].org;
+        if (!orgB) continue;
+        // sólo vecinos más débiles y NO depredadores
+        if (orgB.energy < energyA && !orgB.isPredator) {
+          candidates.push([nx, ny]);
+        }
+      }
+    }
+    if (candidates.length === 0) return null;
+    return candidates[Math.floor(Math.random() * candidates.length)];
+  }
+
+
   private mutateOrganism(parent: Organism): Organism {
     const r = parent.mutationRate;
     const jitter = (v: number, scale: number) => v + (Math.random() * 2 - 1) * scale * r;
@@ -251,6 +252,7 @@ export class World {
       mutationRate: Math.max(0.0, Math.min(0.2, jitter(parent.mutationRate, 0.02))),
       reproThreshold: Math.max(0.5, jitter(parent.reproThreshold, 0.3)),
       reproCooldown: 0,
+      isPredator: Math.random() < 0.05 ? !parent.isPredator : parent.isPredator,
     };
   }
 
@@ -288,6 +290,22 @@ export class World {
     }
     return count;
   }
+
+  getPredatorStats(): { predators: number; total: number; fraction: number } {
+  let predators = 0;
+  let total = 0;
+  for (let y = 0; y < GRID_HEIGHT; y++) {
+    for (let x = 0; x < GRID_WIDTH; x++) {
+      const org = this.grid[y][x].org;
+      if (!org) continue;
+      total++;
+      if ((org as any).isPredator) predators++;
+    }
+  }
+  const fraction = total > 0 ? predators / total : 0;
+  return { predators, total, fraction };
+}
+
 
 }
 

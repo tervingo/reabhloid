@@ -105,8 +105,23 @@ function updateInspectorFromMouse(event: MouseEvent) {
   const mx = event.clientX - rect.left;
   const my = event.clientY - rect.top;
 
+  // ignorar la barra superior
+  const myInGrid = my - INFO_BAR_HEIGHT;
+  if (myInGrid < 0) {
+    // ratón en la barra: limpiar inspector
+    cellPosSpan.textContent = "-";
+    cellZoneSpan.textContent = "-";
+    cellAliveSpan.textContent = "no";
+    cellTempOptSpan.textContent = "-";
+    cellEnergySpan.textContent = "-";
+    cellAgeSpan.textContent = "-";
+    cellMaxAgeSpan.textContent = "-";
+    cellNutrientSpan.textContent = "-";
+    return;
+  }
+
   const x = Math.floor(mx / CELL_SIZE);
-  const y = Math.floor(my / CELL_SIZE);
+  const y = Math.floor(myInGrid / CELL_SIZE);
 
   if (x < 0 || y < 0 || x >= GRID_WIDTH || y >= GRID_HEIGHT) {
     cellPosSpan.textContent = "-";
@@ -116,6 +131,7 @@ function updateInspectorFromMouse(event: MouseEvent) {
     cellEnergySpan.textContent = "-";
     cellAgeSpan.textContent = "-";
     cellMaxAgeSpan.textContent = "-";
+    cellNutrientSpan.textContent = "-";
     return;
   }
 
@@ -141,6 +157,7 @@ function updateInspectorFromMouse(event: MouseEvent) {
     cellMaxAgeSpan.textContent = `${org.maxAge} ticks (~${maxAgeDays.toFixed(1)} días)`;
   }
 }
+
 
 
 function updateParamsFromUI() {
@@ -409,8 +426,13 @@ function draw() {
   const tickText = `Tick: ${world.tickCount}`;
   const popText = `Pop: ${world.getPopulation()}`;
 
+  const predStats = world.getPredatorStats();
+  const predPercent = (predStats.fraction * 100).toFixed(1);
+  const predText = `Pred: ${predPercent}%`;
+
   ctx.fillText(tickText, 6, INFO_BAR_HEIGHT / 2);
   ctx.fillText(popText, 140, INFO_BAR_HEIGHT / 2);
+  ctx.fillText(predText, 300, INFO_BAR_HEIGHT / 2);
 
   for (let y = 0; y < GRID_HEIGHT; y++) {
     for (let x = 0; x < GRID_WIDTH; x++) {
@@ -505,6 +527,18 @@ function draw() {
         } else {
           drawCross(ctx, cx, cy, size);
         }
+
+      // contorno amarillo si es depredador
+        if (org.isPredator) {
+          ctx.save();
+          ctx.strokeStyle = "#ffff00";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(cx, cy, size * 0.9, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.restore();
+        }
+
       }
 
       if (!cell.org && cell.env.lastEatenTicks && cell.env.lastEatenTicks > 0) {

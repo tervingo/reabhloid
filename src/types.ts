@@ -18,6 +18,7 @@ export interface Organism {
   mutationRate: number;
   reproThreshold: number;
   reproCooldown?: number; // ticks hasta poder reproducirse otra vez
+  isPredator: boolean; 
 }
 
 export interface CellState {

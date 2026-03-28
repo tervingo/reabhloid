@@ -98,6 +98,7 @@
         <h2>Inspector celda</h2>
         <p>--------------------</p>
         <p>Posición: <span id="cellPos">-</span></p>
+        <p>Especie: <span id="cellSpecies">-</span></p>
         <p>Nutriente: <span id="cellNutrient">-</span></p>
         <p>Zona: <span id="cellZone">-</span></p>
         <p>Viva: <span id="cellAlive">no</span></p>
@@ -105,9 +106,17 @@
         <p>Energía: <span id="cellEnergy">-</span></p>
         <p>Edad: <span id="cellAge">-</span></p>
         <p>maxAge: <span id="cellMaxAge">-</span></p>
+        <p>Índice depredación: <span id="cellPredationIndex">-</span></p>
       </div>
 
       <div class="ui-col ui-right">
+        <div style="margin-bottom: 8px;">
+          <label for="modeSelect">Modo:</label>
+          <select id="modeSelect">
+            <option value="ecology">Ecología</option>
+            <option value="species" selected>Especies</option>
+          </select>
+        </div>
         <h2>Controls</h2>
         <p>--------------------</p>
          <button id="start">Start</button>
@@ -188,7 +197,19 @@
           <input id="reproCooldown" type="range" min="1" max="20" value="4" />
           <span id="reproCooldownLabel"></span>
         </label>
-
+        <div>
+        <h3>Especiación</h3>
+          <label for="speciesM">M inicial (mutación especie): </label>
+          <input
+            id="speciesM"
+            type="range"
+            min="1"
+            max="20"
+            value="5"
+            step="1"
+          />
+          <span id="speciesMLabel">0.05</span>
+        </div>
         <h3>Estrés térmico</h3>
         <label>
           Intensidad estrés
@@ -204,7 +225,7 @@
     </div>
   </div>
 
-  <script type="module" src="/src/main.ts"></script>
+  <script type="module" src="/src/boot.ts"></script>
 </body>
 
 

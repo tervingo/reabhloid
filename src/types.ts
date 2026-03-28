@@ -10,25 +10,45 @@ export interface CellEnv {
   zone: ZoneId;
 }
 
-export interface Organism {
+export interface OrganismEcology {
   energy: number;
   age: number;
   maxAge: number;
   tempOpt: number;
   mutationRate: number;
   reproThreshold: number;
-  reproCooldown?: number; // ticks hasta poder reproducirse otra vez
-  isPredator: boolean; 
+  reproCooldown: number;
+  isPredator: boolean;
 }
 
-export interface CellState {
+export interface OrganismSpecies {
+  energy: number;
+  age: number;
+  maxAge: number;
+  tempOpt: number;
+  mutationRate: number;
+  reproThreshold: number;
+  reproCooldown: number;
+  isPredator: boolean;       
+  predationIndex: number;        // 0–1, estrategia de depredación
+  speciesId: number;
+  founderId: number;
+  speciationMarkerTicks?: number;
+}
+
+export interface CellStateEcology {
   env: CellEnv;
-  org: Organism | null;
+  org: OrganismEcology | null;
+}
+
+export interface CellStateSpecies {
+  env: CellEnv;
+  org: OrganismSpecies | null;
 }
 
 export interface CellEnv {
   temperature: number;
   nutrient: number;
   zone: ZoneId;
-  lastEatenTicks?: number; // 0 si nada, >0 si recién comida
+  lastEatenTicks: number; // 0 si nada, >0 si recién comida
 }

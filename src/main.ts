@@ -29,6 +29,8 @@ const cellTempOptSpan = document.getElementById("cellTempOpt") as HTMLSpanElemen
 const cellEnergySpan = document.getElementById("cellEnergy") as HTMLSpanElement;
 const cellAgeSpan = document.getElementById("cellAge") as HTMLSpanElement;
 const cellMaxAgeSpan = document.getElementById("cellMaxAge") as HTMLSpanElement;
+const cellNutrientSpan = document.getElementById("cellNutrient") as HTMLSpanElement;
+const cellSpeciesSpan = document.getElementById("cellSpecies") as HTMLSpanElement;
 
 const zone0RegenInput = document.getElementById("zone0Regen") as HTMLInputElement;
 const zone1RegenInput = document.getElementById("zone1Regen") as HTMLInputElement;
@@ -52,39 +54,72 @@ const reproCooldownLabel = document.getElementById("reproCooldownLabel") as HTML
 
 const tempStressLabel = document.getElementById("tempStressLabel") as HTMLSpanElement;
 
-const cellNutrientSpan = document.getElementById("cellNutrient") as HTMLSpanElement;
-
-
 const MAX_HISTORY = 200;
 const popHistory: number[] = [];
 
 const CELL_SIZE = canvas.width / GRID_WIDTH;
-
 const INFO_BAR_HEIGHT = 40;
 
-
 let maxPopSeen = 1;
-let world = new World();
+let world: World;
 let lastTime = 0;
 let accumulator = 0;
 let tickDelay = Number(tickDelayInput.value);
 let isRunning = false;
+let animationId: number | null = null;
+let listenersAttached = false;
+
+// === API para boot.ts ===
+export function initEcologyMode(): () => void {
+  world = new World();
+  accumulator = 0;
+  tickDelay = Number(tickDelayInput.value);
+  isRunning = false;
+  lastTime = performance.now();
+  maxPopSeen = 1;
+  popHistory.length = 0;
+
+  updateZoneTempsFromUI();
+  updateParamsFromUI();
+  updateSliderLabels();
+  applyPresetSoft(); // o comenta esto si no quieres preset por defecto
+
+  if (!listenersAttached) {
+    listenersAttached = true;
+    attachListeners();
+  }
+
+  // primer render
+  updateUIAndDraw();
+  drawPopulationChart();
+
+  if (animationId === null) {
+    const loopWrapper = (t: number) => {
+      loop(t);
+      animationId = requestAnimationFrame(loopWrapper);
+    };
+    animationId = requestAnimationFrame(loopWrapper);
+  }
+
+  return () => {
+    isRunning = false;
+  };
+}
+
+// === Lógica de UI y simulación ===
 
 tickDelayInput.addEventListener("input", () => {
   tickDelay = Number(tickDelayInput.value);
 });
 
-
 function updateSliderLabels() {
-  // regen: mostramos valor efectivo (por tick)
-  const r0 = (Number(zone0RegenInput.value) / 1000 * 2);
-  const r1 = (Number(zone1RegenInput.value) / 1000 * 2);
-  const r2 = (Number(zone2RegenInput.value) / 1000 * 2);
+  const r0 = (Number(zone0RegenInput.value) / 1000) * 2;
+  const r1 = (Number(zone1RegenInput.value) / 1000) * 2;
+  const r2 = (Number(zone2RegenInput.value) / 1000) * 2;
   zone0RegenLabel.textContent = r0.toFixed(3);
   zone1RegenLabel.textContent = r1.toFixed(3);
   zone2RegenLabel.textContent = r2.toFixed(3);
 
-  // reproducción
   const thr = Number(reproThresholdInput.value) / 100;
   const cost = Number(reproCostInput.value) / 100;
   const childE = Number(reproChildEnergyInput.value) / 100;
@@ -94,11 +129,9 @@ function updateSliderLabels() {
   reproChildEnergyLabel.textContent = childE.toFixed(2);
   reproCooldownLabel.textContent = cd.toString();
 
-  // estrés térmico
   const stress = Number(tempStressInput.value) / 100;
   tempStressLabel.textContent = stress.toFixed(2);
 }
-
 
 function updateInspectorFromMouse(event: MouseEvent) {
   const rect = canvas.getBoundingClientRect();
@@ -158,21 +191,27 @@ function updateInspectorFromMouse(event: MouseEvent) {
   }
 }
 
-
+function clearInspector() {
+  cellPosSpan.textContent = "-";
+  cellZoneSpan.textContent = "-";
+  cellAliveSpan.textContent = "no";
+  cellTempOptSpan.textContent = "-";
+  cellEnergySpan.textContent = "-";
+  cellAgeSpan.textContent = "-";
+  cellMaxAgeSpan.textContent = "-";
+  cellNutrientSpan.textContent = "-";
+}
 
 function updateParamsFromUI() {
-  // nutriente por zona: slider 0–100 → 0–0.1
-  world.zoneRegen[0] = Number(zone0RegenInput.value) / 1000 * 2; // ~0–0.2
-  world.zoneRegen[1] = Number(zone1RegenInput.value) / 1000 * 2;
-  world.zoneRegen[2] = Number(zone2RegenInput.value) / 1000 * 2;
+  world.zoneRegen[0] = (Number(zone0RegenInput.value) / 1000) * 2;
+  world.zoneRegen[1] = (Number(zone1RegenInput.value) / 1000) * 2;
+  world.zoneRegen[2] = (Number(zone2RegenInput.value) / 1000) * 2;
 
-  // reproducción
-  world.reproThreshold = Number(reproThresholdInput.value) / 100; // 0.5–3.0 aprox
-  world.reproCost = Number(reproCostInput.value) / 100;           // 0.1–2.0
-  world.reproChildEnergy = Number(reproChildEnergyInput.value) / 100; // 0.1–1.5
-  world.reproCooldown = Number(reproCooldownInput.value);         // 1–20 ticks
+  world.reproThreshold = Number(reproThresholdInput.value) / 100;
+  world.reproCost = Number(reproCostInput.value) / 100;
+  world.reproChildEnergy = Number(reproChildEnergyInput.value) / 100;
+  world.reproCooldown = Number(reproCooldownInput.value);
 
-  // estrés térmico: slider 1–50 → 0.01–0.5
   world.tempStressIntensity = Number(tempStressInput.value) / 100;
 
   updateSliderLabels();
@@ -188,105 +227,150 @@ function updateZoneTempsFromUI() {
   zone2Label.textContent = (world.zoneBaseTemps[2] * 50).toFixed(1);
 }
 
-[zone0Input, zone1Input, zone2Input].forEach(input => {
-  input.addEventListener("input", () => {
-    updateZoneTempsFromUI();
+function attachListeners() {
+  [zone0Input, zone1Input, zone2Input].forEach(input => {
+    input.addEventListener("input", () => {
+      updateZoneTempsFromUI();
+    });
   });
-});
 
-[
-  zone0RegenInput,
-  zone1RegenInput,
-  zone2RegenInput,
-  reproThresholdInput,
-  reproCostInput,
-  reproChildEnergyInput,
-  reproCooldownInput,
-  tempStressInput,
-].forEach(input => {
-  input.addEventListener("input", () => {
+  [
+    zone0RegenInput,
+    zone1RegenInput,
+    zone2RegenInput,
+    reproThresholdInput,
+    reproCostInput,
+    reproChildEnergyInput,
+    reproCooldownInput,
+    tempStressInput,
+  ].forEach(input => {
+    input.addEventListener("input", () => {
+      updateParamsFromUI();
+    });
+  });
+
+  canvas.addEventListener("mousemove", updateInspectorFromMouse);
+  canvas.addEventListener("mouseleave", clearInspector);
+
+  const startBtn = document.getElementById("start") as HTMLButtonElement;
+  const restartBtn = document.getElementById("restart") as HTMLButtonElement;
+  const pauseBtn = document.getElementById("pause") as HTMLButtonElement;
+  const stepBtn = document.getElementById("step") as HTMLButtonElement;
+
+  startBtn.addEventListener("click", () => {
     updateParamsFromUI();
+    isRunning = true;
+    lastTime = performance.now();
   });
-});
 
+  pauseBtn.addEventListener("click", () => {
+    isRunning = false;
+  });
 
-canvas.addEventListener("mousemove", updateInspectorFromMouse);
-canvas.addEventListener("mouseleave", () => {
-  cellPosSpan.textContent = "-";
-  cellZoneSpan.textContent = "-";
-  cellAliveSpan.textContent = "no";
-  cellTempOptSpan.textContent = "-";
-  cellEnergySpan.textContent = "-";
-  cellAgeSpan.textContent = "-";
-  cellMaxAgeSpan.textContent = "-";
-});
+  restartBtn.addEventListener("click", () => {
+    world = new World();
+    accumulator = 0;
+    updateZoneTempsFromUI();
+    updateParamsFromUI();
+    updateUIAndDraw();
+  });
+
+  stepBtn.addEventListener("click", () => {
+    isRunning = false;
+    world.step();
+    updateUIAndDraw();
+    recordPopulation(world.getPopulation());
+    drawPopulationChart();
+  });
+
+  const presetSoftBtn = document.getElementById("presetSoft") as HTMLButtonElement;
+  const presetHarshBtn = document.getElementById("presetHarsh") as HTMLButtonElement;
+  const presetDesertBtn = document.getElementById("presetDesert") as HTMLButtonElement;
+
+  presetSoftBtn.addEventListener("click", () => {
+    isRunning = false;
+    world = new World();
+    accumulator = 0;
+    applyPresetSoft();
+    updateUIAndDraw();
+  });
+
+  presetHarshBtn.addEventListener("click", () => {
+    isRunning = false;
+    world = new World();
+    accumulator = 0;
+    applyPresetHarsh();
+    updateUIAndDraw();
+  });
+
+  presetDesertBtn.addEventListener("click", () => {
+    isRunning = false;
+    world = new World();
+    accumulator = 0;
+    applyPresetDesert();
+    updateUIAndDraw();
+  });
+}
 
 function applyPresetSoft() {
-  // temperaturas: frío, templado, cálido moderado
-  zone0Input.value = "20";  // 10 ºC
-  zone1Input.value = "50";  // 25 ºC
-  zone2Input.value = "70";  // 35 ºC
+  zone0Input.value = "20";
+  zone1Input.value = "50";
+  zone2Input.value = "70";
 
-  // regen nutriente (0–100 → 0–0.2 aprox)
   zone0RegenInput.value = "35";
   zone1RegenInput.value = "60";
   zone2RegenInput.value = "15";
 
-  // reproducción
-  reproThresholdInput.value = "180";     // 1.8
-  reproCostInput.value = "90";           // 0.9
-  reproChildEnergyInput.value = "50";    // 0.5
-  reproCooldownInput.value = "4";        // 4 ticks
+  reproThresholdInput.value = "180";
+  reproCostInput.value = "90";
+  reproChildEnergyInput.value = "50";
+  reproCooldownInput.value = "4";
 
-  // estrés térmico
-  tempStressInput.value = "10";          // 0.10
+  tempStressInput.value = "10";
 
   updateZoneTempsFromUI();
   updateParamsFromUI();
 }
 
 function applyPresetHarsh() {
-  zone0Input.value = "10";  // 5 ºC
-  zone1Input.value = "40";  // 20 ºC
-  zone2Input.value = "80";  // 40 ºC
+  zone0Input.value = "10";
+  zone1Input.value = "40";
+  zone2Input.value = "80";
 
   zone0RegenInput.value = "25";
   zone1RegenInput.value = "45";
   zone2RegenInput.value = "10";
 
-  reproThresholdInput.value = "220";     // 2.2
-  reproCostInput.value = "120";          // 1.2
-  reproChildEnergyInput.value = "40";    // 0.4
-  reproCooldownInput.value = "7";        // 7 ticks
+  reproThresholdInput.value = "220";
+  reproCostInput.value = "120";
+  reproChildEnergyInput.value = "40";
+  reproCooldownInput.value = "7";
 
-  tempStressInput.value = "20";          // 0.20
+  tempStressInput.value = "20";
 
   updateZoneTempsFromUI();
   updateParamsFromUI();
 }
 
 function applyPresetDesert() {
-  zone0Input.value = "30";  // 15 ºC
-  zone1Input.value = "60";  // 30 ºC
-  zone2Input.value = "90";  // 45 ºC
+  zone0Input.value = "30";
+  zone1Input.value = "60";
+  zone2Input.value = "90";
 
   zone0RegenInput.value = "20";
   zone1RegenInput.value = "30";
   zone2RegenInput.value = "5";
 
-  reproThresholdInput.value = "190";     // 1.9
-  reproCostInput.value = "95";           // 0.95
-  reproChildEnergyInput.value = "45";    // 0.45
+  reproThresholdInput.value = "190";
+  reproCostInput.value = "95";
+  reproChildEnergyInput.value = "45";
   reproCooldownInput.value = "5";
 
-  tempStressInput.value = "18";          // 0.18
+  tempStressInput.value = "18";
 
   updateZoneTempsFromUI();
   updateParamsFromUI();
 }
-
-updateZoneTempsFromUI();
-updateParamsFromUI();
 
 function recordPopulation(pop: number) {
   popHistory.push(pop);
@@ -297,125 +381,42 @@ function recordPopulation(pop: number) {
 }
 
 function drawPopulationChart() {
-  const ctx = popChartCtx;
   const w = popChartCanvas.width;
   const h = popChartCanvas.height;
 
-  ctx.clearRect(0, 0, w, h);
+  popChartCtx.clearRect(0, 0, w, h);
 
   if (popHistory.length < 2) return;
 
   const max = maxPopSeen || 1;
   const stepX = w / (MAX_HISTORY - 1);
 
-  ctx.beginPath();
-  ctx.lineWidth = 1;
-  ctx.strokeStyle = "#8be9fd";
+  popChartCtx.beginPath();
+  popChartCtx.lineWidth = 1;
+  popChartCtx.strokeStyle = "#8be9fd";
 
   popHistory.forEach((pop, i) => {
     const x = i * stepX;
     const y = h - (pop / max) * (h - 4) - 2;
     if (i === 0) {
-      ctx.moveTo(x, y);
+      popChartCtx.moveTo(x, y);
     } else {
-      ctx.lineTo(x, y);
+      popChartCtx.lineTo(x, y);
     }
   });
 
-  ctx.stroke();
+  popChartCtx.stroke();
 
-  // base line
-  ctx.strokeStyle = "rgba(255,255,255,0.2)";
-  ctx.beginPath();
-  ctx.moveTo(0, h - 1);
-  ctx.lineTo(w, h - 1);
-  ctx.stroke();
+  popChartCtx.strokeStyle = "rgba(255,255,255,0.2)";
+  popChartCtx.beginPath();
+  popChartCtx.moveTo(0, h - 1);
+  popChartCtx.lineTo(w, h - 1);
+  popChartCtx.stroke();
 }
-
-// BOTONES
-
-const startBtn = document.getElementById("start") as HTMLButtonElement;
-const restartBtn = document.getElementById("restart") as HTMLButtonElement;
-const pauseBtn = document.getElementById("pause") as HTMLButtonElement;
-const stepBtn = document.getElementById("step") as HTMLButtonElement;
-
-
-startBtn.addEventListener("click", () => {
-  // updateZoneTempsFromUI();
-  updateParamsFromUI();
-  isRunning = true;
-  // opcional: resetear lastTime para evitar salto grande
-  lastTime = performance.now();
-});
-
-pauseBtn.addEventListener("click", () => {
-  isRunning = false;
-});
-
-restartBtn.addEventListener("click", () => {
-  world = new World();
-  accumulator = 0;
-  // mantenemos isRunning como esté: si estaba corriendo, arranca desde 0; si estaba en pausa, se queda en pausa
-  updateZoneTempsFromUI();
-  updateParamsFromUI();
-});
-
-stepBtn.addEventListener("click", () => {
-  // Forzar pausa para no mezclar con el loop continuo
-  isRunning = false;
-
-  // Avanzar un tick fijo
-  world.step();
-
-  // Actualizar visualización (igual que hace loop)
-  draw();
-
-  const pop = world.getPopulation();
-  tickSpan.textContent = world.tickCount.toString();
-  popSpan.textContent = pop.toString();
-
-  const traits = world.getTraitStats();
-  tempOptMeanSpan.textContent = (traits.tempMean * 50).toFixed(1); // ºC
-  tempOptStdSpan.textContent = (traits.tempStd * 50).toFixed(1);   // ºC
-  const daysPerTick = 1 / 24;
-  const maxAgeDays = traits.maxAgeMean * daysPerTick;
-  maxAgeMeanSpan.textContent = maxAgeDays.toFixed(1);
-
-  recordPopulation(pop);
-  drawPopulationChart();
-});
-
-
-const presetSoftBtn = document.getElementById("presetSoft") as HTMLButtonElement;
-const presetHarshBtn = document.getElementById("presetHarsh") as HTMLButtonElement;
-const presetDesertBtn = document.getElementById("presetDesert") as HTMLButtonElement;
-
-presetSoftBtn.addEventListener("click", () => {
-  isRunning = false;
-  world = new World();
-  accumulator = 0;
-  applyPresetSoft();
-});
-
-presetHarshBtn.addEventListener("click", () => {
-  isRunning = false;
-  world = new World();
-  accumulator = 0;
-  applyPresetHarsh();
-});
-
-presetDesertBtn.addEventListener("click", () => {
-  isRunning = false;
-  world = new World();
-  accumulator = 0;
-  applyPresetDesert();
-});
-
 
 function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // barra superior
   ctx.fillStyle = "#000000";
   ctx.fillRect(0, 0, canvas.width, INFO_BAR_HEIGHT);
 
@@ -437,25 +438,25 @@ function draw() {
   for (let y = 0; y < GRID_HEIGHT; y++) {
     for (let x = 0; x < GRID_WIDTH; x++) {
       const cell = world.grid[y][x];
-      const n = cell.env.nutrient; // 0–1
+      const n = cell.env.nutrient;
 
       let rBg = 0;
       let gBg = 0;
       let bBg = 0;
 
       switch (cell.env.zone) {
-        case 0: // fría: azul
+        case 0:
           rBg = 0;
-          gBg = Math.round(20 + 40 * n);   // un poco de verde
-          bBg = Math.round(60 + 180 * n);  // azul más intenso con nutriente
+          gBg = Math.round(20 + 40 * n);
+          bBg = Math.round(60 + 180 * n);
           break;
-        case 1: // templada: verde
+        case 1:
           rBg = Math.round(20 + 40 * n);
-          gBg = Math.round(80 + 170 * n);  // verde fuerte con nutriente
+          gBg = Math.round(80 + 170 * n);
           bBg = Math.round(20 + 40 * n);
           break;
-        case 2: // cálida: roja
-          rBg = Math.round(80 + 170 * n);  // rojo fuerte con nutriente
+        case 2:
+          rBg = Math.round(80 + 170 * n);
           gBg = Math.round(20 + 40 * n);
           bBg = Math.round(20 + 40 * n);
           break;
@@ -469,52 +470,28 @@ function draw() {
         CELL_SIZE
       );
 
-      // 2) Organismo (si lo hay)
       if (cell.org) {
         const org = cell.org;
 
-        // temperatura REAL de la celda en este tick
-        const tEnv = cell.env.temperature;          // 0–1
-        const tOpt = org.tempOpt;                   // 0–1
-
-        const diff = Math.abs(tEnv - tOpt);         // 0 (perfecto) – 1 (horrible)
-        const diffClamped = Math.min(0.5, diff) / 0.5; // 0–1, saturando a partir de diff=0.5
-
-        // verde cuando diff≈0, rojo cuando diff≥0.5
+        // color por desajuste térmico
+        const tEnv = cell.env.temperature;
+        const tOpt = org.tempOpt;
+        const diff = Math.abs(tEnv - tOpt);
+        const diffClamped = Math.min(0.5, diff) / 0.5;
         const r = Math.round(255 * diffClamped);
         const g = Math.round(255 * (1 - diffClamped));
         const b = 40;
-
-        // brillo según energía
         const e = Math.max(0, Math.min(1, org.energy / 3));
         const brightness = 0.4 + 0.6 * e;
-
         const rFinal = Math.round(r * brightness);
         const gFinal = Math.round(g * brightness);
         const bFinal = Math.round(b * brightness);
-
         ctx.fillStyle = `rgb(${rFinal}, ${gFinal}, ${bFinal})`;
-
-
-/*         // Color base según tempOpt
-        const tOpt = org.tempOpt;
-        const rBase = Math.round(50 + 205 * tOpt);  // 50 +
-        const gBase = Math.round(200 - 100 * tOpt);  // 200 - 
-        const bBase = Math.round(200 - 100 * tOpt);  // 0 
-
-        // Brillo según energía
-        const e = Math.max(0, Math.min(1, org.energy / 3));
-        const brightness = 0.4 + 0.6 * e;
-
-        const r = Math.round(rBase * brightness);
-        const g = Math.round(gBase * brightness);
-        const b = Math.round(bBase * brightness);
-        ctx.fillStyle = `rgb(${r}, ${g}, ${b})`; */
 
         const ageRatio = org.maxAge > 0 ? org.age / org.maxAge : 0;
         const cx = x * CELL_SIZE + CELL_SIZE / 2;
         const cy = INFO_BAR_HEIGHT + y * CELL_SIZE + CELL_SIZE / 2;
-        const size = CELL_SIZE * 0.35; // radio/semilado base
+        const size = CELL_SIZE * 0.35;
 
         if (org.age <= 10) {
           drawStar(ctx, cx, cy, size);
@@ -527,38 +504,27 @@ function draw() {
         } else {
           drawCross(ctx, cx, cy, size);
         }
-
-      // contorno amarillo si es depredador
-        if (org.isPredator) {
-          ctx.save();
-          ctx.strokeStyle = "#ffff00";
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.arc(cx, cy, size * 0.9, 0, Math.PI * 2);
-          ctx.stroke();
-          ctx.restore();
-        }
-
       }
 
       if (!cell.org && cell.env.lastEatenTicks && cell.env.lastEatenTicks > 0) {
-          const cx = x * CELL_SIZE + CELL_SIZE / 2;
-          const cy = INFO_BAR_HEIGHT + y * CELL_SIZE + CELL_SIZE / 2;
-          const size = CELL_SIZE * 0.35;
+        const cx = x * CELL_SIZE + CELL_SIZE / 2;
+        const cy = INFO_BAR_HEIGHT + y * CELL_SIZE + CELL_SIZE / 2;
+        const size = CELL_SIZE * 0.35;
 
-          ctx.save();
-          ctx.strokeStyle = "orangeRed";
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.moveTo(cx - size, cy - size);
-          ctx.lineTo(cx + size, cy + size);
-          ctx.moveTo(cx - size, cy + size);
-          ctx.lineTo(cx + size, cy - size);
-          ctx.stroke();
-          ctx.restore();
+        ctx.save();
+        ctx.strokeStyle = "orangeRed";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(cx - size, cy - size);
+        ctx.lineTo(cx + size, cy + size);
+        ctx.moveTo(cx - size, cy + size);
+        ctx.lineTo(cx + size, cy - size);
+        ctx.stroke();
+        ctx.restore();
       }
     }
   }
+
   // opcional: grid lines
   ctx.strokeStyle = "rgba(0,0,0,0.2)";
   ctx.lineWidth = 1;
@@ -576,17 +542,32 @@ function draw() {
   }
 }
 
-function drawCircle(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) {
+function drawCircle(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  r: number
+) {
   ctx.beginPath();
   ctx.arc(cx, cy, r, 0, Math.PI * 2);
   ctx.fill();
 }
 
-function drawSquare(ctx: CanvasRenderingContext2D, cx: number, cy: number, half: number) {
+function drawSquare(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  half: number
+) {
   ctx.fillRect(cx - half, cy - half, half * 2, half * 2);
 }
 
-function drawTriangle(ctx: CanvasRenderingContext2D, cx: number, cy: number, size: number) {
+function drawTriangle(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  size: number
+) {
   const h = size * Math.sqrt(3);
   ctx.beginPath();
   ctx.moveTo(cx, cy - h / 2);
@@ -596,10 +577,15 @@ function drawTriangle(ctx: CanvasRenderingContext2D, cx: number, cy: number, siz
   ctx.fill();
 }
 
-function drawCross(ctx: CanvasRenderingContext2D, cx: number, cy: number, size: number) {
+function drawCross(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  size: number
+) {
   const half = size;
   ctx.save();
-  ctx.strokeStyle = "#ffffff"; // blanco
+  ctx.strokeStyle = "#ffffff";
   ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.moveTo(cx - half, cy - half);
@@ -610,12 +596,16 @@ function drawCross(ctx: CanvasRenderingContext2D, cx: number, cy: number, size: 
   ctx.restore();
 }
 
-function drawStar(ctx: CanvasRenderingContext2D, cx: number, cy: number, outerR: number) {
+function drawStar(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  outerR: number
+) {
   const innerR = outerR * 0.5;
   const spikes = 5;
   let rot = -Math.PI / 2;
   const step = Math.PI / spikes;
-  ctx.fillStyle = "#7fff00"; // chartreuse
   ctx.beginPath();
   for (let i = 0; i < spikes; i++) {
     const xOuter = cx + Math.cos(rot) * outerR;
@@ -632,6 +622,19 @@ function drawStar(ctx: CanvasRenderingContext2D, cx: number, cy: number, outerR:
   ctx.fill();
 }
 
+function updateUIAndDraw() {
+  draw();
+  const pop = world.getPopulation();
+  tickSpan.textContent = world.tickCount.toString();
+  popSpan.textContent = pop.toString();
+
+  const traits = world.getTraitStats();
+  tempOptMeanSpan.textContent = (traits.tempMean * 50).toFixed(1);
+  tempOptStdSpan.textContent = (traits.tempStd * 50).toFixed(1);
+  const daysPerTick = 1 / 24;
+  const maxAgeDays = traits.maxAgeMean * daysPerTick;
+  maxAgeMeanSpan.textContent = maxAgeDays.toFixed(1);
+}
 
 function loop(timestamp: number) {
   const dt = timestamp - lastTime;
@@ -639,31 +642,12 @@ function loop(timestamp: number) {
 
   if (isRunning) {
     accumulator += dt;
-
     while (accumulator >= tickDelay) {
       world.step();
       accumulator -= tickDelay;
+      updateUIAndDraw();
+      recordPopulation(world.getPopulation());
+      drawPopulationChart();
     }
   }
-
-  draw();
-
-  const pop = world.getPopulation();
-  tickSpan.textContent = world.tickCount.toString();
-  popSpan.textContent = pop.toString();
-
-  const traits = world.getTraitStats();
-  tempOptMeanSpan.textContent = (traits.tempMean * 50).toFixed(1); // ºC
-  tempOptStdSpan.textContent = (traits.tempStd * 50).toFixed(1);   // ºC
-  const daysPerTick = 1 / 24;
-  const maxAgeDays = traits.maxAgeMean * daysPerTick;
-  maxAgeMeanSpan.textContent = maxAgeDays.toFixed(1);
-
-  recordPopulation(pop);
-  drawPopulationChart();
-
-  requestAnimationFrame(loop);
 }
-
-
-requestAnimationFrame(loop);

@@ -56,7 +56,141 @@ export class WorldSpecies {
     };
   }
 
-    private shouldSpeciate(parent: OrganismSpecies, child: OrganismSpecies): boolean {
+  private updateOrganisms() {
+    const newGrid = this.grid.map(row =>
+      row.map(cell => ({
+        ...cell,
+        org: cell.org ? { ...cell.org } : null,
+      }))
+    );
+
+    for (let y = 0; y < GRID_HEIGHT; y++) {
+      for (let x = 0; x < GRID_WIDTH; x++) {
+        const cell = this.grid[y][x];
+        const org = cell.org;
+        if (!org) continue;
+
+        const newCell = newGrid[y][x];
+        let newOrg = newCell.org;
+        if (!newOrg) continue;
+
+        // 1) edad
+        newOrg.age += 1;
+
+        // marcador especiación
+        if (newOrg.speciationMarkerTicks && newOrg.speciationMarkerTicks > 0) {
+          newOrg.speciationMarkerTicks -= 1;
+        }
+
+        // 2) coste basal
+        newOrg.energy -= 0.01;
+
+        // 3) estrés térmico
+        const tempDiff = Math.abs(cell.env.temperature - newOrg.tempOpt);
+        const tempPenalty = tempDiff * tempDiff * this.tempStressIntensity;
+        newOrg.energy -= tempPenalty;
+
+        // 4) comer
+        const eaten = Math.min(cell.env.nutrient, 0.2);
+        newCell.env.nutrient -= eaten;
+        newOrg.energy += eaten * 1.0;
+
+        // 5) muerte
+        if (newOrg.energy <= 0 || newOrg.age > newOrg.maxAge) {
+          newCell.org = null;
+          continue;
+        }
+
+        newOrg = newCell.org;
+        if (!newOrg) continue;
+
+        // 6) cooldown reproducción
+        if (newOrg.reproCooldown && newOrg.reproCooldown > 0) {
+          newOrg.reproCooldown -= 1;
+        }
+
+        // 7) predación (solo depredadores hambrientos, solo presas no depredadoras)
+        const hungerThreshold = 1.3;
+        if (newOrg.isPredator && newOrg.energy < hungerThreshold) {
+          const victimPos = this.findPreyWithPolicy(x, y, newGrid, newOrg);
+          if (victimPos) {
+            const [vx, vy] = victimPos;
+            const victimCell = newGrid[vy][vx];
+            const victim = victimCell.org;
+            if (victim) {
+              const gained = victim.energy * 0.7;
+              newOrg.energy += gained;
+              victimCell.org = null;
+              victimCell.env.lastEatenTicks = 5;
+            }
+          }
+        }
+        // 8) reproducción
+        const canReproduce =
+          newOrg.energy > this.reproThreshold &&
+          (newOrg.reproCooldown ?? 0) <= 0 &&
+          newOrg.age > 5;
+
+        if (canReproduce) {
+          const pos = this.findEmptyNeighbor(x, y, newGrid);
+          if (pos) {
+            const [nx, ny] = pos;
+            const child = this.mutateOrganism(newOrg);
+            const cost = this.reproCost;
+            const energyToChild = this.reproChildEnergy;
+
+            if (newOrg.energy > cost) {
+              child.energy = energyToChild;
+              newOrg.energy -= cost;
+              newOrg.reproCooldown = this.reproCooldown;
+              newGrid[ny][nx].org = child;
+            }
+          }
+        }
+      }
+    }
+
+    this.grid = newGrid;
+  }
+
+  private mutateOrganism(parent: OrganismSpecies): OrganismSpecies {
+    const r = parent.mutationRate;
+    const jitter = (v: number, scale: number) =>
+      v + (Math.random() * 2 - 1) * scale * r;
+
+    let child: OrganismSpecies = {
+      energy: parent.energy,
+      age: 0,
+      maxAge: Math.max(20, Math.round(jitter(parent.maxAge, 10))),
+      tempOpt: Math.max(0, Math.min(1, jitter(parent.tempOpt, 0.1))),
+      mutationRate: parent.mutationRate,
+      reproThreshold: Math.max(0.5, jitter(parent.reproThreshold, 0.3)),
+      reproCooldown: 0,
+      // flip de depredador raro
+      isPredator:
+        Math.random() < 0.05 ? !parent.isPredator : parent.isPredator,
+      predationIndex: Math.max(
+        0,
+        Math.min(1, jitter(parent.predationIndex, 0.6))
+      ),
+      speciesId: parent.speciesId,
+      founderId: parent.founderId,
+    };
+
+    if (this.shouldSpeciate(parent, child)) {
+      const newSpeciesId = this.createSpecies();
+      child = {
+        ...child,
+        speciesId: newSpeciesId,
+        founderId: newSpeciesId,
+        speciationMarkerTicks: 10,
+      };
+    }
+
+    return child;
+  }
+
+  private shouldSpeciate(parent: OrganismSpecies, child: OrganismSpecies): boolean {
     let diffCount = 0;
     const m = parent.mutationRate;
 
@@ -70,7 +204,7 @@ export class WorldSpecies {
     // if (child.isPredator !== parent.isPredator) diffCount++;
 
     if (diffCount > 0) {
-     console.log("diffCount =", diffCount, "M =", m);
+      console.log("diffCount =", diffCount, "M =", m);
     }
 
     if (diffCount === 0) return false;
@@ -86,7 +220,47 @@ export class WorldSpecies {
     const p = Math.min(0.9, baseP * mFactor);
 
     return Math.random() < p;
+  }
+
+  private findPreyWithPolicy(
+    x: number,
+    y: number,
+    grid: CellStateSpecies[][],
+    predator: OrganismSpecies
+  ): [number, number] | null {
+    const candidates: [number, number][] = [];
+    const pIndex = predator.predationIndex; // 0..1
+
+    // factor según predationIndex: qué energía máxima tolera en la presa
+    const minFactor = 0.3;  // pIndex = 0: solo mucho más débiles
+    const maxFactor = 2;  // pIndex = 1: puede atacar algo más fuerte
+    const factor = minFactor + (maxFactor - minFactor) * pIndex;
+
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        if (dx === 0 && dy === 0) continue;
+        const nx = x + dx;
+        const ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= GRID_WIDTH || ny >= GRID_HEIGHT) continue;
+
+        const prey = grid[ny][nx].org;
+        if (!prey) continue;
+
+        // evitar canibalismo salvo que esté bastante hambriento
+        const sameSpecies = prey.speciesId === predator.speciesId;
+        if (sameSpecies && predator.energy > 0.5) continue;
+
+        // condición solo por energía relativa y predationIndex
+        if (prey.energy <= predator.energy * factor) {
+          candidates.push([nx, ny]);
+        }
+      }
     }
+
+    if (candidates.length === 0) return null;
+    return candidates[Math.floor(Math.random() * candidates.length)];
+  }
+
 
   private initGrid() {
     for (let y = 0; y < GRID_HEIGHT; y++) {
@@ -153,166 +327,6 @@ export class WorldSpecies {
     }
   }
 
-  private updateOrganisms() {
-    const newGrid = this.grid.map(row =>
-      row.map(cell => ({
-        ...cell,
-        org: cell.org ? { ...cell.org } : null,
-      }))
-    );
-
-    for (let y = 0; y < GRID_HEIGHT; y++) {
-      for (let x = 0; x < GRID_WIDTH; x++) {
-        const cell = this.grid[y][x];
-        const org = cell.org;
-        if (!org) continue;
-
-        const newCell = newGrid[y][x];
-        let newOrg = newCell.org;
-        if (!newOrg) continue;
-
-        // 1) edad
-        newOrg.age += 1;
-
-        // marcador especiación
-        if (newOrg.speciationMarkerTicks && newOrg.speciationMarkerTicks > 0) {
-          newOrg.speciationMarkerTicks -= 1;
-        }
-
-        // 2) coste basal
-        newOrg.energy -= 0.01;
-
-        // 3) estrés térmico
-        const tempDiff = Math.abs(cell.env.temperature - newOrg.tempOpt);
-        const tempPenalty = tempDiff * tempDiff * this.tempStressIntensity;
-        newOrg.energy -= tempPenalty;
-
-        // 4) comer
-        const eaten = Math.min(cell.env.nutrient, 0.2);
-        newCell.env.nutrient -= eaten;
-        newOrg.energy += eaten * 1.0;
-
-        // 5) muerte
-        if (newOrg.energy <= 0 || newOrg.age > newOrg.maxAge) {
-          newCell.org = null;
-          continue;
-        }
-
-        newOrg = newCell.org;
-        if (!newOrg) continue;
-
-        // 6) cooldown reproducción
-        if (newOrg.reproCooldown && newOrg.reproCooldown > 0) {
-          newOrg.reproCooldown -= 1;
-        }
-
-        // 7) predación (solo depredadores hambrientos, solo presas no depredadoras)
-        const hungerThreshold = 0.9;
-        if (newOrg.isPredator && newOrg.energy < hungerThreshold) {
-        const victimPos = this.findPreyWithPolicy(x, y, newGrid, newOrg);
-        if (victimPos) {
-            const [vx, vy] = victimPos;
-            const victimCell = newGrid[vy][vx];
-            const victim = victimCell.org;
-            if (victim) {
-            const gained = victim.energy * 0.7;
-            newOrg.energy += gained;
-            victimCell.org = null;
-            victimCell.env.lastEatenTicks = 5;
-            }
-        }
-        }
-        // 8) reproducción
-        const canReproduce =
-          newOrg.energy > this.reproThreshold &&
-          (newOrg.reproCooldown ?? 0) <= 0 &&
-          newOrg.age > 5;
-
-        if (canReproduce) {
-          const pos = this.findEmptyNeighbor(x, y, newGrid);
-          if (pos) {
-            const [nx, ny] = pos;
-            const child = this.mutateOrganism(newOrg);
-            const cost = this.reproCost;
-            const energyToChild = this.reproChildEnergy;
-
-            if (newOrg.energy > cost) {
-              child.energy = energyToChild;
-              newOrg.energy -= cost;
-              newOrg.reproCooldown = this.reproCooldown;
-              newGrid[ny][nx].org = child;
-            }
-          }
-        }
-      }
-    }
-
-    this.grid = newGrid;
-  }
-
-private findPreyWithPolicy(
-  x: number,
-  y: number,
-  grid: CellStateSpecies[][],
-  predator: OrganismSpecies
-    ): [number, number] | null {
-  const candidates: [number, number][] = [];
-  const pIndex = predator.predationIndex; // 0..1
-
-  // factor según predationIndex: qué energía máxima tolera en la presa
-  const minFactor = 0.3;  // pIndex = 0: solo mucho más débiles
-  const maxFactor = 1.5;  // pIndex = 1: puede atacar algo más fuerte
-  const factor = minFactor + (maxFactor - minFactor) * pIndex;
-
-  for (let dy = -1; dy <= 1; dy++) {
-    for (let dx = -1; dx <= 1; dx++) {
-      if (dx === 0 && dy === 0) continue;
-      const nx = x + dx;
-      const ny = y + dy;
-      if (nx < 0 || ny < 0 || nx >= GRID_WIDTH || ny >= GRID_HEIGHT) continue;
-
-      const prey = grid[ny][nx].org;
-      if (!prey) continue;
-
-      // evitar canibalismo salvo que esté bastante hambriento
-      const sameSpecies = prey.speciesId === predator.speciesId;
-      if (sameSpecies && predator.energy > 0.5) continue;
-
-      // condición solo por energía relativa y predationIndex
-      if (prey.energy <= predator.energy * factor) {
-        candidates.push([nx, ny]);
-      }
-    }
-  }
-
-  if (candidates.length === 0) return null;
-  return candidates[Math.floor(Math.random() * candidates.length)];
-}
-
-/*   private findWeakerNeighbor(
-    x: number,
-    y: number,
-    grid: CellStateSpecies[][],
-    energyA: number
-  ): [number, number] | null {
-    const candidates: [number, number][] = [];
-    for (let dy = -1; dy <= 1; dy++) {
-      for (let dx = -1; dx <= 1; dx++) {
-        if (dx === 0 && dy === 0) continue;
-        const nx = x + dx;
-        const ny = y + dy;
-        if (nx < 0 || ny < 0 || nx >= GRID_WIDTH || ny >= GRID_HEIGHT) continue;
-        const orgB = grid[ny][nx].org;
-        if (!orgB) continue;
-        if (orgB.energy < energyA && !orgB.isPredator) {
-          candidates.push([nx, ny]);
-        }
-      }
-    }
-    if (candidates.length === 0) return null;
-    return candidates[Math.floor(Math.random() * candidates.length)];
-  } */
-
   private findEmptyNeighbor(
     x: number,
     y: number,
@@ -331,43 +345,6 @@ private findPreyWithPolicy(
     if (candidates.length === 0) return null;
     return candidates[Math.floor(Math.random() * candidates.length)];
   }
-
-private mutateOrganism(parent: OrganismSpecies): OrganismSpecies {
-  const r = parent.mutationRate;
-  const jitter = (v: number, scale: number) =>
-    v + (Math.random() * 2 - 1) * scale * r;
-
-  let child: OrganismSpecies = {
-    energy: parent.energy,
-    age: 0,
-    maxAge: Math.max(20, Math.round(jitter(parent.maxAge, 10))),
-    tempOpt: Math.max(0, Math.min(1, jitter(parent.tempOpt, 0.1))),
-    mutationRate: parent.mutationRate,
-    reproThreshold: Math.max(0.5, jitter(parent.reproThreshold, 0.3)),
-    reproCooldown: 0,
-    // flip de depredador raro
-    isPredator:
-      Math.random() < 0.05 ? !parent.isPredator : parent.isPredator,
-    predationIndex: Math.max(
-      0,
-      Math.min(1, jitter(parent.predationIndex, 0.6))
-    ),
-    speciesId: parent.speciesId,
-    founderId: parent.founderId,
-  };
-
-  if (this.shouldSpeciate(parent, child)) {
-    const newSpeciesId = this.createSpecies();
-    child = {
-      ...child,
-      speciesId: newSpeciesId,
-      founderId: newSpeciesId,
-      speciationMarkerTicks: 10,
-    };
-  }
-
-  return child;
-}
 
   getTraitStats() {
     const temps: number[] = [];

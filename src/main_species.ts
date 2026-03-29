@@ -5,6 +5,24 @@ import { GRID_WIDTH, GRID_HEIGHT } from "./types";
 const canvas = document.getElementById("world") as HTMLCanvasElement;
 const ctx = canvas.getContext("2d")!;
 
+const zone0Input = document.getElementById("zone0Temp") as HTMLInputElement;
+const zone1Input = document.getElementById("zone1Temp") as HTMLInputElement;
+const zone2Input = document.getElementById("zone2Temp") as HTMLInputElement;
+
+const zone0RegenInput = document.getElementById("zone0Regen") as HTMLInputElement;
+const zone1RegenInput = document.getElementById("zone1Regen") as HTMLInputElement;
+const zone2RegenInput = document.getElementById("zone2Regen") as HTMLInputElement;
+
+const zone0Label = document.getElementById("zone0TempLabel") as HTMLSpanElement;
+const zone1Label = document.getElementById("zone1TempLabel") as HTMLSpanElement;
+const zone2Label = document.getElementById("zone2TempLabel") as HTMLSpanElement;
+
+const zone0RegenLabel = document.getElementById("zone0RegenLabel") as HTMLSpanElement;
+const zone1RegenLabel = document.getElementById("zone1RegenLabel") as HTMLSpanElement;
+const zone2RegenLabel = document.getElementById("zone2RegenLabel") as HTMLSpanElement;
+
+
+
 const tickDelayInput = document.getElementById("tickDelay") as HTMLInputElement;
 const tickSpan = document.getElementById("tickValue") as HTMLSpanElement;
 const popSpan = document.getElementById("popValue") as HTMLSpanElement;
@@ -55,7 +73,9 @@ export function initSpeciesMode(): () => void {
   }
 
   updateUIAndDraw();
+  updateZoneTempsFromUI();
   updateSpeciesMLabel();
+  updateSliderLabels();
 
   if (animationId === null) {
     const loopWrapper = (t: number) => {
@@ -69,6 +89,19 @@ export function initSpeciesMode(): () => void {
     isRunning = false;
   };
 }
+
+// Sliders
+
+function updateSliderLabels() {
+  const r0 = (Number(zone0RegenInput.value) / 1000) * 2;
+  const r1 = (Number(zone1RegenInput.value) / 1000) * 2;
+  const r2 = (Number(zone2RegenInput.value) / 1000) * 2;
+  zone0RegenLabel.textContent = r0.toFixed(3);
+  zone1RegenLabel.textContent = r1.toFixed(3);
+  zone2RegenLabel.textContent = r2.toFixed(3);
+
+}
+
 
 // Inspector
 
@@ -132,6 +165,27 @@ function clearInspector() {
   cellPredationIndexSpan.textContent = "-";
 }
 
+
+function updateParamsFromUI() {
+  world.zoneRegen[0] = (Number(zone0RegenInput.value) / 1000) * 2;
+  world.zoneRegen[1] = (Number(zone1RegenInput.value) / 1000) * 2;
+  world.zoneRegen[2] = (Number(zone2RegenInput.value) / 1000) * 2;
+
+  updateSliderLabels();
+}
+
+
+function updateZoneTempsFromUI() {
+    world.zoneBaseTemps[0] = Number(zone0Input.value) / 100;
+    world.zoneBaseTemps[1] = Number(zone1Input.value) / 100;
+    world.zoneBaseTemps[2] = Number(zone2Input.value) / 100;
+
+    zone0Label.textContent = (world.zoneBaseTemps[0] * 50).toFixed(1);
+    zone1Label.textContent = (world.zoneBaseTemps[1] * 50).toFixed(1);
+    zone2Label.textContent = (world.zoneBaseTemps[2] * 50).toFixed(1);
+  }
+
+
 // === Lógica de UI y simulación (modo especies) ===
 
 tickDelayInput.addEventListener("input", () => {
@@ -143,6 +197,23 @@ speciesMInput.addEventListener("input", () => {
 });
 
 function attachListeners() {
+  
+  [zone0Input, zone1Input, zone2Input].forEach(input => {
+    input.addEventListener("input", () => {
+      updateZoneTempsFromUI();
+    });
+  });
+  [
+    zone0RegenInput,
+    zone1RegenInput,
+    zone2RegenInput,
+  ].forEach(input => {
+    input.addEventListener("input", () => {
+      updateParamsFromUI();
+    });
+  });
+
+
   const startBtn = document.getElementById("start") as HTMLButtonElement;
   const restartBtn = document.getElementById("restart") as HTMLButtonElement;
   const pauseBtn = document.getElementById("pause") as HTMLButtonElement;

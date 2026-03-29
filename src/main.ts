@@ -227,6 +227,7 @@ function updateZoneTempsFromUI() {
 }
 
 function attachListeners() {
+  
   [zone0Input, zone1Input, zone2Input].forEach(input => {
     input.addEventListener("input", () => {
       updateZoneTempsFromUI();

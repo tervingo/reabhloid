@@ -21,15 +21,13 @@ const zone0RegenLabel = document.getElementById("zone0RegenLabel") as HTMLSpanEl
 const zone1RegenLabel = document.getElementById("zone1RegenLabel") as HTMLSpanElement;
 const zone2RegenLabel = document.getElementById("zone2RegenLabel") as HTMLSpanElement;
 
-
-
 const tickDelayInput = document.getElementById("tickDelay") as HTMLInputElement;
-const tickSpan = document.getElementById("tickValue") as HTMLSpanElement;
-const popSpan = document.getElementById("popValue") as HTMLSpanElement;
 
+/* const tickSpan = document.getElementById("tickValue") as HTMLSpanElement;
+const popSpan = document.getElementById("popValue") as HTMLSpanElement;
 const tempOptMeanSpan = document.getElementById("tempOptMean") as HTMLSpanElement;
 const tempOptStdSpan = document.getElementById("tempOptStd") as HTMLSpanElement;
-const maxAgeMeanSpan = document.getElementById("maxAgeMean") as HTMLSpanElement;
+const maxAgeMeanSpan = document.getElementById("maxAgeMean") as HTMLSpanElement; */
 
 const speciesMInput = document.getElementById("speciesM") as HTMLInputElement;
 const speciesMLabel = document.getElementById("speciesMLabel") as HTMLSpanElement;
@@ -53,44 +51,14 @@ let lastTime = 0;
 let accumulator = 0;
 let tickDelay = Number(tickDelayInput.value);
 let isRunning = false;
-let animationId: number | null = null;
-let listenersAttached = false;
 
-// === API para boot.ts ===
-export function initSpeciesMode(): () => void {
-  world = new WorldSpecies();
-  accumulator = 0;
+tickDelayInput.addEventListener("input", () => {
   tickDelay = Number(tickDelayInput.value);
-  isRunning = false;
-  lastTime = performance.now();
+});
 
-  const initialM = Number(speciesMInput.value) / 100;
-  world.seedSingleAncestor(initialM);
-
-  if (!listenersAttached) {
-    listenersAttached = true;
-    attachListeners();
-  }
-
-  updateUIAndDraw();
-  updateZoneTempsFromUI();
+speciesMInput.addEventListener("input", () => {
   updateSpeciesMLabel();
-  updateSliderLabels();
-
-  if (animationId === null) {
-    const loopWrapper = (t: number) => {
-      loop(t);
-      animationId = requestAnimationFrame(loopWrapper);
-    };
-    animationId = requestAnimationFrame(loopWrapper);
-  }
-
-  return () => {
-    isRunning = false;
-  };
-}
-
-// Sliders
+});
 
 function updateSliderLabels() {
   const r0 = (Number(zone0RegenInput.value) / 1000) * 2;
@@ -99,11 +67,7 @@ function updateSliderLabels() {
   zone0RegenLabel.textContent = r0.toFixed(3);
   zone1RegenLabel.textContent = r1.toFixed(3);
   zone2RegenLabel.textContent = r2.toFixed(3);
-
 }
-
-
-// Inspector
 
 function updateInspectorFromMouse(event: MouseEvent) {
   const rect = canvas.getBoundingClientRect();
@@ -165,7 +129,6 @@ function clearInspector() {
   cellPredationIndexSpan.textContent = "-";
 }
 
-
 function updateParamsFromUI() {
   world.zoneRegen[0] = (Number(zone0RegenInput.value) / 1000) * 2;
   world.zoneRegen[1] = (Number(zone1RegenInput.value) / 1000) * 2;
@@ -174,30 +137,17 @@ function updateParamsFromUI() {
   updateSliderLabels();
 }
 
-
 function updateZoneTempsFromUI() {
-    world.zoneBaseTemps[0] = Number(zone0Input.value) / 100;
-    world.zoneBaseTemps[1] = Number(zone1Input.value) / 100;
-    world.zoneBaseTemps[2] = Number(zone2Input.value) / 100;
+  world.zoneBaseTemps[0] = Number(zone0Input.value) / 100;
+  world.zoneBaseTemps[1] = Number(zone1Input.value) / 100;
+  world.zoneBaseTemps[2] = Number(zone2Input.value) / 100;
 
-    zone0Label.textContent = (world.zoneBaseTemps[0] * 50).toFixed(1);
-    zone1Label.textContent = (world.zoneBaseTemps[1] * 50).toFixed(1);
-    zone2Label.textContent = (world.zoneBaseTemps[2] * 50).toFixed(1);
-  }
-
-
-// === Lógica de UI y simulación (modo especies) ===
-
-tickDelayInput.addEventListener("input", () => {
-  tickDelay = Number(tickDelayInput.value);
-});
-
-speciesMInput.addEventListener("input", () => {
-  updateSpeciesMLabel();
-});
+  zone0Label.textContent = (world.zoneBaseTemps[0] * 50).toFixed(1);
+  zone1Label.textContent = (world.zoneBaseTemps[1] * 50).toFixed(1);
+  zone2Label.textContent = (world.zoneBaseTemps[2] * 50).toFixed(1);
+}
 
 function attachListeners() {
-  
   [zone0Input, zone1Input, zone2Input].forEach(input => {
     input.addEventListener("input", () => {
       updateZoneTempsFromUI();
@@ -212,7 +162,6 @@ function attachListeners() {
       updateParamsFromUI();
     });
   });
-
 
   const startBtn = document.getElementById("start") as HTMLButtonElement;
   const restartBtn = document.getElementById("restart") as HTMLButtonElement;
@@ -249,7 +198,6 @@ function attachListeners() {
 function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // barra superior
   ctx.fillStyle = "#000000";
   ctx.fillRect(0, 0, canvas.width, INFO_BAR_HEIGHT);
 
@@ -266,12 +214,10 @@ function draw() {
   ctx.fillText(popText, 150, INFO_BAR_HEIGHT / 2);
   ctx.fillText(speciesText, 300, INFO_BAR_HEIGHT / 2);
 
-  // tablero
   for (let y = 0; y < GRID_HEIGHT; y++) {
     for (let x = 0; x < GRID_WIDTH; x++) {
       const cell = world.grid[y][x];
 
-      // fondo por zona/nutriente (igual que en main.ts)
       const n = cell.env.nutrient;
       let rBg = 0;
       let gBg = 0;
@@ -303,7 +249,6 @@ function draw() {
         CELL_SIZE
       );
 
-      // organismo coloreado por especie
       if (cell.org) {
         const org = cell.org;
         const speciesInfo = world.speciesMap.get(org.speciesId);
@@ -325,45 +270,38 @@ function draw() {
         } else {
           drawCross(ctx, cx, cy, size);
         }
-    
-      // marca de nueva especie
 
-      if (org.speciationMarkerTicks && org.speciationMarkerTicks > 0) {
-        const cx = x * CELL_SIZE + CELL_SIZE / 2;
-        const cy = INFO_BAR_HEIGHT + y * CELL_SIZE + CELL_SIZE / 2;
-        const size = CELL_SIZE * 0.4;
+        if (org.speciationMarkerTicks && org.speciationMarkerTicks > 0) {
+          const cx2 = x * CELL_SIZE + CELL_SIZE / 2;
+          const cy2 = INFO_BAR_HEIGHT + y * CELL_SIZE + CELL_SIZE / 2;
+          const size2 = CELL_SIZE * 0.4;
 
-        ctx.save();
-        ctx.strokeStyle = "#ffffff";
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(cx - size, cy);
-        ctx.lineTo(cx + size, cy);
-        ctx.moveTo(cx, cy - size);
-        ctx.lineTo(cx, cy + size);
-        ctx.stroke();
-        ctx.restore();
+          ctx.save();
+          ctx.strokeStyle = "#ffffff";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(cx2 - size2, cy2);
+          ctx.lineTo(cx2 + size2, cy2);
+          ctx.moveTo(cx2, cy2 - size2);
+          ctx.lineTo(cx2, cy2 + size2);
+          ctx.stroke();
+          ctx.restore();
         }
 
-      if (org.isPredator) {
-        ctx.save();
-        ctx.strokeStyle = "red";
-        ctx.lineWidth = 1.5;
-        ctx.strokeRect(
-          x * CELL_SIZE + 1,
-          INFO_BAR_HEIGHT + y * CELL_SIZE + 1,
-          CELL_SIZE - 2,
-          CELL_SIZE - 2
-        );
-        ctx.restore();
+        if (org.isPredator) {
+          ctx.save();
+          ctx.strokeStyle = "red";
+          ctx.lineWidth = 1.5;
+          ctx.strokeRect(
+            x * CELL_SIZE + 1,
+            INFO_BAR_HEIGHT + y * CELL_SIZE + 1,
+            CELL_SIZE - 2,
+            CELL_SIZE - 2
+          );
+          ctx.restore();
+        }
       }
 
-
-      }
-
-
-
-      // marca de predación (opcional)
       if (!cell.org && cell.env.lastEatenTicks && cell.env.lastEatenTicks > 0) {
         const cx = x * CELL_SIZE + CELL_SIZE / 2;
         const cy = INFO_BAR_HEIGHT + y * CELL_SIZE + CELL_SIZE / 2;
@@ -384,33 +322,17 @@ function draw() {
   }
 }
 
-// formas (copiadas de main.ts)
-function drawCircle(
-  ctx: CanvasRenderingContext2D,
-  cx: number,
-  cy: number,
-  r: number
-) {
+function drawCircle(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) {
   ctx.beginPath();
   ctx.arc(cx, cy, r, 0, Math.PI * 2);
   ctx.fill();
 }
 
-function drawSquare(
-  ctx: CanvasRenderingContext2D,
-  cx: number,
-  cy: number,
-  half: number
-) {
+function drawSquare(ctx: CanvasRenderingContext2D, cx: number, cy: number, half: number) {
   ctx.fillRect(cx - half, cy - half, half * 2, half * 2);
 }
 
-function drawTriangle(
-  ctx: CanvasRenderingContext2D,
-  cx: number,
-  cy: number,
-  size: number
-) {
+function drawTriangle(ctx: CanvasRenderingContext2D, cx: number, cy: number, size: number) {
   const h = size * Math.sqrt(3);
   ctx.beginPath();
   ctx.moveTo(cx, cy - h / 2);
@@ -420,12 +342,7 @@ function drawTriangle(
   ctx.fill();
 }
 
-function drawCross(
-  ctx: CanvasRenderingContext2D,
-  cx: number,
-  cy: number,
-  size: number
-) {
+function drawCross(ctx: CanvasRenderingContext2D, cx: number, cy: number, size: number) {
   const half = size;
   ctx.save();
   ctx.strokeStyle = "#ffffff";
@@ -439,12 +356,7 @@ function drawCross(
   ctx.restore();
 }
 
-function drawStar(
-  ctx: CanvasRenderingContext2D,
-  cx: number,
-  cy: number,
-  outerR: number
-) {
+function drawStar(ctx: CanvasRenderingContext2D, cx: number, cy: number, outerR: number) {
   const innerR = outerR * 0.5;
   const spikes = 5;
   let rot = -Math.PI / 2;
@@ -468,18 +380,19 @@ function drawStar(
 function updateUIAndDraw() {
   draw();
 
+/*  
   const pop = world.getPopulation();
   tickSpan.textContent = world.tickCount.toString();
   popSpan.textContent = pop.toString();
 
-  const traits = world.getTraitStats();
+   const traits = world.getTraitStats();
   if (tempOptMeanSpan && tempOptStdSpan && maxAgeMeanSpan) {
     tempOptMeanSpan.textContent = (traits.tempMean * 50).toFixed(1);
     tempOptStdSpan.textContent = (traits.tempStd * 50).toFixed(1);
     const daysPerTick = 1 / 24;
     const maxAgeDays = traits.maxAgeMean * daysPerTick;
     maxAgeMeanSpan.textContent = maxAgeDays.toFixed(1);
-  }
+  } */
 }
 
 function updateSpeciesMLabel() {
@@ -500,3 +413,27 @@ function loop(timestamp: number) {
     }
   }
 }
+
+window.addEventListener("DOMContentLoaded", () => {
+  world = new WorldSpecies();
+  accumulator = 0;
+  tickDelay = Number(tickDelayInput.value);
+  isRunning = false;
+  lastTime = performance.now();
+
+  const initialM = Number(speciesMInput.value) / 100;
+  world.seedSingleAncestor(initialM);
+
+  attachListeners();
+
+  updateUIAndDraw();
+  updateZoneTempsFromUI();
+  updateSpeciesMLabel();
+  updateSliderLabels();
+
+  const loopWrapper = (t: number) => {
+    loop(t);
+    requestAnimationFrame(loopWrapper);
+  };
+  requestAnimationFrame(loopWrapper);
+});

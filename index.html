@@ -3,7 +3,7 @@
 
 <head>
   <meta charset="UTF-8" />
-  <title>Evolution Sim</title>
+  <title>Species Sim</title>
   <style>
     body {
       margin: 0;
@@ -84,7 +84,6 @@
       margin: 2px 0;
     }
   </style>
-
 </head>
 
 <body>
@@ -110,16 +109,9 @@
       </div>
 
       <div class="ui-col ui-right">
-        <div style="margin-bottom: 8px;">
-          <label for="modeSelect">Modo:</label>
-          <select id="modeSelect">
-            <option value="ecology">Ecología</option>
-            <option value="species" selected>Especies</option>
-          </select>
-        </div>
         <h2>Controls</h2>
         <p>--------------------</p>
-         <button id="start">Start</button>
+        <button id="start">Start</button>
         <button id="pause">Pause</button>
         <button id="step">Step</button>
         <button id="restart">Restart</button>
@@ -128,7 +120,7 @@
           <input id="tickDelay" type="range" min="0" max="500" value="200" />
         </label>
 
-        <h3>Estado global</h3>
+<!--¡¡         <h3>Estado global</h3>
         <div id="stats">
           <p>Tick: <span id="tickValue">0</span></p>
           <p>Población: <span id="popValue">0</span></p>
@@ -136,10 +128,7 @@
           <p>tempOpt desv: <span id="tempOptStd">0</span> ºC</p>
           <p>maxAge media: <span id="maxAgeMean">0</span> días</p>
         </div>
-
-        <h3>Población (últimos ticks)</h3>
-        <canvas id="popChart" width="240" height="80"></canvas>
-
+ -->
         <h3>Zonas (temperatura)</h3>
         <label>
           Zona 0 (fría)
@@ -176,57 +165,22 @@
           <span id="zone2RegenLabel"></span>
         </label>
 
-        <h3>Reproducción</h3>
-        <label>
-          Umbral energía
-          <input id="reproThreshold" type="range" min="50" max="300" value="180" />
-          <span id="reproThresholdLabel"></span>
-        </label>
-        <label>
-          Coste reproducción
-          <input id="reproCost" type="range" min="10" max="200" value="90" />
-          <span id="reproCostLabel"></span>
-        </label>
-        <label>
-          Energía al hijo
-          <input id="reproChildEnergy" type="range" min="10" max="150" value="50" />
-          <span id="reproChildEnergyLabel"></span>
-        </label>
-        <label>
-          Cooldown (ticks)
-          <input id="reproCooldown" type="range" min="1" max="20" value="4" />
-          <span id="reproCooldownLabel"></span>
-        </label>
-        <div>
         <h3>Especiación</h3>
-          <label for="speciesM">M inicial (mutación especie): </label>
-          <input
-            id="speciesM"
-            type="range"
-            min="1"
-            max="20"
-            value="5"
-            step="1"
-          />
-          <span id="speciesMLabel">0.05</span>
-        </div>
-        <h3>Estrés térmico</h3>
-        <label>
-          Intensidad estrés
-          <input id="tempStress" type="range" min="1" max="50" value="10" />
-          <span id="tempStressLabel"></span>
-        </label>
-
-        <h3>Presets</h3>
-        <button id="presetSoft">Suave</button>
-        <button id="presetHarsh">Hostil</button>
-        <button id="presetDesert">Desierto cálido</button>
+        <label for="speciesM">M inicial (mutación especie): </label>
+        <input
+          id="speciesM"
+          type="range"
+          min="1"
+          max="20"
+          value="5"
+          step="1"
+        />
+        <span id="speciesMLabel">0.05</span>
       </div>
     </div>
   </div>
 
-  <script type="module" src="/src/boot.ts"></script>
+  <script type="module" src="/src/main_species.ts"></script>
 </body>
-
 
 </html>

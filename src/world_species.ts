@@ -17,7 +17,7 @@ export class WorldSpecies {
 
   // Especies
   speciesCounter = 1;
-  speciesMap = new Map<number, { color: string }>();
+  speciesMap = new Map<number, { color: string; tempOpt: number; maxAge: number; predationIndex: number }>();
 
   constructor() {
     this.grid = [];
@@ -33,12 +33,12 @@ export class WorldSpecies {
   seedSingleAncestor(initialMutationRate: number) {
     this.resetGridEmpty();
 
-    const baseSpecies = this.createSpecies();
-
     const x = Math.floor(GRID_WIDTH / 2);
     const y = Math.floor(GRID_HEIGHT / 2);
     const cell = this.grid[y][x];
     const tempOpt = this.baseTempForZone(cell.env.zone);
+
+    const baseSpecies = this.createSpecies({ tempOpt, maxAge: 80, predationIndex: 0.5 });
 
     cell.org = {
       energy: 1,
@@ -178,7 +178,7 @@ export class WorldSpecies {
     };
 
     if (this.shouldSpeciate(parent, child)) {
-      const newSpeciesId = this.createSpecies();
+      const newSpeciesId = this.createSpecies({ tempOpt: child.tempOpt, maxAge: child.maxAge, predationIndex: child.predationIndex });
       child = {
         ...child,
         speciesId: newSpeciesId,
@@ -293,12 +293,29 @@ export class WorldSpecies {
     return this.zoneBaseTemps[zone];
   }
 
-  private createSpecies(): number {
+  private createSpecies(traits: { tempOpt: number; maxAge: number; predationIndex: number }): number {
     const id = this.speciesCounter++;
     const hue = (id * 157) % 360;
     const color = `hsl(${hue}, 90%, 50%)`;
-    this.speciesMap.set(id, { color });
+    this.speciesMap.set(id, { color, ...traits });
     return id;
+  }
+
+  getLiveSpeciesInfo(): Array<{ id: number; color: string; tempOpt: number; maxAge: number; predationIndex: number; count: number }> {
+    const counts = new Map<number, number>();
+    for (let y = 0; y < GRID_HEIGHT; y++) {
+      for (let x = 0; x < GRID_WIDTH; x++) {
+        const org = this.grid[y][x].org;
+        if (org) counts.set(org.speciesId, (counts.get(org.speciesId) ?? 0) + 1);
+      }
+    }
+    const result: Array<{ id: number; color: string; tempOpt: number; maxAge: number; predationIndex: number; count: number }> = [];
+    for (const [id, info] of this.speciesMap) {
+      const count = counts.get(id);
+      if (count) result.push({ id, ...info, count });
+    }
+    result.sort((a, b) => a.id - b.id);
+    return result;
   }
 
   step() {

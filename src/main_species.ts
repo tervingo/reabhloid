@@ -42,6 +42,7 @@ const cellMaxAgeSpan = document.getElementById("cellMaxAge") as HTMLSpanElement;
 const cellNutrientSpan = document.getElementById("cellNutrient") as HTMLSpanElement;
 const cellSpeciesSpan = document.getElementById("cellSpecies") as HTMLSpanElement;
 const cellPredationIndexSpan = document.getElementById("cellPredationIndex") as HTMLSpanElement;
+const speciesListDiv = document.getElementById("speciesList") as HTMLDivElement;
 
 const CELL_SIZE = canvas.width / GRID_WIDTH;
 const INFO_BAR_HEIGHT = 40;
@@ -380,7 +381,15 @@ function drawStar(ctx: CanvasRenderingContext2D, cx: number, cy: number, outerR:
 function updateUIAndDraw() {
   draw();
 
-/*  
+  const liveSpecies = world.getLiveSpeciesInfo();
+  speciesListDiv.innerHTML = liveSpecies.map(sp =>
+    `<div style="display:flex;align-items:center;gap:5px;margin:2px 0">` +
+    `<span style="display:inline-block;width:10px;height:10px;background:${sp.color};flex-shrink:0;border-radius:2px"></span>` +
+    `<span>#${sp.id}(${sp.count}) &nbsp;T:${(sp.tempOpt * 50).toFixed(1)}ºC &nbsp;A:${sp.maxAge} &nbsp;P:${sp.predationIndex.toFixed(2)}</span>` +
+    `</div>`
+  ).join('');
+
+/*
   const pop = world.getPopulation();
   tickSpan.textContent = world.tickCount.toString();
   popSpan.textContent = pop.toString();

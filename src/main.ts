@@ -30,7 +30,6 @@ const cellEnergySpan = document.getElementById("cellEnergy") as HTMLSpanElement;
 const cellAgeSpan = document.getElementById("cellAge") as HTMLSpanElement;
 const cellMaxAgeSpan = document.getElementById("cellMaxAge") as HTMLSpanElement;
 const cellNutrientSpan = document.getElementById("cellNutrient") as HTMLSpanElement;
-const cellSpeciesSpan = document.getElementById("cellSpecies") as HTMLSpanElement;
 
 const zone0RegenInput = document.getElementById("zone0Regen") as HTMLInputElement;
 const zone1RegenInput = document.getElementById("zone1Regen") as HTMLInputElement;

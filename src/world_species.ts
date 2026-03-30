@@ -6,9 +6,11 @@ export class WorldSpecies {
   grid: CellStateSpecies[][];
   tickCount = 0;
   zoneBaseTemps: number[] = [0.2, 0.5, 0.8]; // 0–1
-  zoneRegen: number[] = [0.035, 0.06, 0.015];
+  zoneRegen: number[] = [0.018, 0.030, 0.008];
 
-  reproThreshold = 1.8;
+  predatorThreshold = 0.3;  // pIndex por encima del cual el organismo intenta cazar
+
+  reproThreshold = 1.2;
   reproCost = 0.9;
   reproChildEnergy = 0.5;
   reproCooldown = 4;
@@ -48,8 +50,7 @@ export class WorldSpecies {
       mutationRate: initialMutationRate,
       reproThreshold: this.reproThreshold,
       reproCooldown: 0,
-      isPredator: false,
-      predationIndex: 0.5,   // valor medio inicial
+      predationIndex: 0.5,
       speciesId: baseSpecies,
       founderId: baseSpecies,
       // speciationMarkerTicks opcionalmente 0/undefined
@@ -82,8 +83,8 @@ export class WorldSpecies {
           newOrg.speciationMarkerTicks -= 1;
         }
 
-        // 2) coste basal
-        newOrg.energy -= 0.01;
+        // 2) coste basal + coste metabólico por capacidad depredadora
+        newOrg.energy -= 0.01 + newOrg.predationIndex * 0.015;
 
         // 3) estrés térmico
         const tempDiff = Math.abs(cell.env.temperature - newOrg.tempOpt);
@@ -109,19 +110,26 @@ export class WorldSpecies {
           newOrg.reproCooldown -= 1;
         }
 
-        // 7) predación (solo depredadores hambrientos, solo presas no depredadoras)
+        // 7) predación: activa si pIndex > umbral y tiene hambre
         const hungerThreshold = 1.3;
-        if (newOrg.isPredator && newOrg.energy < hungerThreshold) {
+        if (newOrg.predationIndex > this.predatorThreshold && newOrg.energy < hungerThreshold) {
           const victimPos = this.findPreyWithPolicy(x, y, newGrid, newOrg);
           if (victimPos) {
             const [vx, vy] = victimPos;
             const victimCell = newGrid[vy][vx];
             const victim = victimCell.org;
             if (victim) {
-              const gained = victim.energy * 0.7;
-              newOrg.energy += gained;
-              victimCell.org = null;
-              victimCell.env.lastEatenTicks = 5;
+              // 6) escape: probabilidad proporcional al pIndex de la presa
+              const escapeChance = victim.predationIndex * 0.6;
+              if (Math.random() < escapeChance) {
+                // la presa escapa, sin consecuencias
+              } else {
+                // 3) eficiencia de caza proporcional al pIndex del cazador
+                const efficiency = 0.4 + newOrg.predationIndex * 0.5;
+                newOrg.energy += victim.energy * efficiency;
+                victimCell.org = null;
+                victimCell.env.lastEatenTicks = 5;
+              }
             }
           }
         }
@@ -166,9 +174,6 @@ export class WorldSpecies {
       mutationRate: parent.mutationRate,
       reproThreshold: Math.max(0.5, jitter(parent.reproThreshold, 0.3)),
       reproCooldown: 0,
-      // flip de depredador raro
-      isPredator:
-        Math.random() < 0.05 ? !parent.isPredator : parent.isPredator,
       predationIndex: Math.max(
         0,
         Math.min(1, jitter(parent.predationIndex, 0.6))
@@ -246,11 +251,9 @@ export class WorldSpecies {
         const prey = grid[ny][nx].org;
         if (!prey) continue;
 
-        // evitar canibalismo salvo que esté bastante hambriento
-        const sameSpecies = prey.speciesId === predator.speciesId;
-        if (sameSpecies && predator.energy > 0.5) continue;
+        // misma especie: nunca es presa
+        if (prey.speciesId === predator.speciesId) continue;
 
-        // condición solo por energía relativa y predationIndex
         if (prey.energy <= predator.energy * factor) {
           candidates.push([nx, ny]);
         }
@@ -333,13 +336,10 @@ export class WorldSpecies {
           cell.env.lastEatenTicks -= 1;
         }
 
-        const base = this.baseTempForZone(cell.env.zone);
-        cell.env.temperature += (base - cell.env.temperature) * 0.01;
+        cell.env.temperature = this.baseTempForZone(cell.env.zone);
 
         const regen = this.zoneRegen[cell.env.zone];
         cell.env.nutrient = Math.min(1, cell.env.nutrient + regen);
-
-        cell.env.temperature += (base - cell.env.temperature) * 0.01;
       }
     }
   }

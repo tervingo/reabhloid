@@ -19,8 +19,7 @@ export interface OrganismSpecies {
   mutationRate: number;
   reproThreshold: number;
   reproCooldown: number;
-  isPredator: boolean;
-  predationIndex: number;
+  predationIndex: number;  // 0=herbívoro puro, 1=carnívoro puro
   speciesId: number;
   founderId: number;
   speciationMarkerTicks?: number;

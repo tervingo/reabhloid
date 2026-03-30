@@ -29,6 +29,9 @@ const tempOptMeanSpan = document.getElementById("tempOptMean") as HTMLSpanElemen
 const tempOptStdSpan = document.getElementById("tempOptStd") as HTMLSpanElement;
 const maxAgeMeanSpan = document.getElementById("maxAgeMean") as HTMLSpanElement; */
 
+const tempStressInput = document.getElementById("tempStress") as HTMLInputElement;
+const tempStressLabel = document.getElementById("tempStressLabel") as HTMLSpanElement;
+
 const speciesMInput = document.getElementById("speciesM") as HTMLInputElement;
 const speciesMLabel = document.getElementById("speciesMLabel") as HTMLSpanElement;
 
@@ -68,6 +71,8 @@ function updateSliderLabels() {
   zone0RegenLabel.textContent = r0.toFixed(3);
   zone1RegenLabel.textContent = r1.toFixed(3);
   zone2RegenLabel.textContent = r2.toFixed(3);
+
+  tempStressLabel.textContent = (Number(tempStressInput.value) / 100).toFixed(2);
 }
 
 function updateInspectorFromMouse(event: MouseEvent) {
@@ -135,6 +140,8 @@ function updateParamsFromUI() {
   world.zoneRegen[1] = (Number(zone1RegenInput.value) / 1000) * 2;
   world.zoneRegen[2] = (Number(zone2RegenInput.value) / 1000) * 2;
 
+  world.tempStressIntensity = Number(tempStressInput.value) / 100;
+
   updateSliderLabels();
 }
 
@@ -158,6 +165,7 @@ function attachListeners() {
     zone0RegenInput,
     zone1RegenInput,
     zone2RegenInput,
+    tempStressInput,
   ].forEach(input => {
     input.addEventListener("input", () => {
       updateParamsFromUI();
@@ -289,7 +297,7 @@ function draw() {
           ctx.restore();
         }
 
-        if (org.isPredator) {
+        if (org.predationIndex > world.predatorThreshold) {
           ctx.save();
           ctx.strokeStyle = "red";
           ctx.lineWidth = 1.5;
@@ -321,6 +329,38 @@ function draw() {
       }
     }
   }
+
+  // Rótulos de temperatura por zona en el borde izquierdo
+  const zoneBoundaries = [
+    Math.floor(GRID_HEIGHT / 3),
+    Math.floor((2 * GRID_HEIGHT) / 3),
+    GRID_HEIGHT,
+  ];
+  const zoneStarts = [0, zoneBoundaries[0], zoneBoundaries[1]];
+
+  ctx.save();
+  ctx.font = "bold 13px monospace";
+  ctx.textBaseline = "middle";
+  ctx.textAlign = "left";
+
+  for (let z = 0; z < 3; z++) {
+    const rowStart = zoneStarts[z];
+    const rowEnd = zoneBoundaries[z];
+    const canvasTop = INFO_BAR_HEIGHT + rowStart * CELL_SIZE;
+    const canvasBottom = INFO_BAR_HEIGHT + rowEnd * CELL_SIZE;
+    const midY = (canvasTop + canvasBottom) / 2;
+    const tempC = (world.zoneBaseTemps[z] * 50).toFixed(1);
+    const label = `Z${z}: ${tempC}ºC`;
+
+    const padding = 4;
+    const textWidth = ctx.measureText(label).width;
+    ctx.fillStyle = "rgba(0,0,0,0.55)";
+    ctx.fillRect(4, midY - 9, textWidth + padding * 2, 18);
+
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText(label, 4 + padding, midY);
+  }
+  ctx.restore();
 }
 
 function drawCircle(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) {

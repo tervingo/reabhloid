@@ -5,7 +5,7 @@ import type { CellStateSpecies, OrganismSpecies, ZoneId } from "./types";
 export class WorldSpecies {
   grid: CellStateSpecies[][];
   tickCount = 0;
-  zoneBaseTemps: number[] = [0.2, 0.5, 0.8]; // 0–1
+  zoneBaseTemps: number[] = [0.2, 0.5, 0.7]; // 0–1
   zoneRegen: number[] = [0.018, 0.030, 0.008];
 
   predatorThreshold = 0.3;  // pIndex por encima del cual el organismo intenta cazar
@@ -16,6 +16,10 @@ export class WorldSpecies {
   reproCooldown = 4;
 
   tempStressIntensity = 0.1;
+
+  // Estaciones
+  seasonPeriod = 300;    // ticks por ciclo completo
+  seasonAmplitude = 0.12; // ±6 ºC en escala 0-1
 
   // Especies
   speciesCounter = 1;
@@ -98,6 +102,10 @@ export class WorldSpecies {
 
         // 5) muerte
         if (newOrg.energy <= 0 || newOrg.age > newOrg.maxAge) {
+          // reciclaje: muerte por vejez devuelve energía al suelo
+          if (newOrg.energy > 0) {
+            newCell.env.nutrient = Math.min(1, newCell.env.nutrient + newOrg.energy * 0.5);
+          }
           newCell.org = null;
           continue;
         }
@@ -122,38 +130,40 @@ export class WorldSpecies {
               // 6) escape: probabilidad proporcional al pIndex de la presa
               const escapeChance = victim.predationIndex * 0.6;
               if (Math.random() < escapeChance) {
-                // la presa escapa, sin consecuencias
+                // la presa escapa
               } else {
-                // 3) eficiencia de caza proporcional al pIndex del cazador
                 const efficiency = 0.4 + newOrg.predationIndex * 0.5;
                 newOrg.energy += victim.energy * efficiency;
+                // restos de la presa vuelven al suelo
+                victimCell.env.nutrient = Math.min(1, victimCell.env.nutrient + victim.energy * (1 - efficiency) * 0.4);
                 victimCell.org = null;
                 victimCell.env.lastEatenTicks = 5;
               }
             }
           }
         }
-        // 8) reproducción
+        // 8) reproducción con camada variable
         const canReproduce =
           newOrg.energy > this.reproThreshold &&
           (newOrg.reproCooldown ?? 0) <= 0 &&
           newOrg.age > 5;
 
         if (canReproduce) {
-          const pos = this.findEmptyNeighbor(x, y, newGrid);
-          if (pos) {
+          const maxLitter =
+            newOrg.energy > this.reproThreshold * 3 ? 3 :
+            newOrg.energy > this.reproThreshold * 2 ? 2 : 1;
+          let placed = 0;
+          while (placed < maxLitter && newOrg.energy > this.reproCost) {
+            const pos = this.findEmptyNeighbor(x, y, newGrid);
+            if (!pos) break;
             const [nx, ny] = pos;
             const child = this.mutateOrganism(newOrg);
-            const cost = this.reproCost;
-            const energyToChild = this.reproChildEnergy;
-
-            if (newOrg.energy > cost) {
-              child.energy = energyToChild;
-              newOrg.energy -= cost;
-              newOrg.reproCooldown = this.reproCooldown;
-              newGrid[ny][nx].org = child;
-            }
+            child.energy = this.reproChildEnergy;
+            newOrg.energy -= this.reproCost;
+            newGrid[ny][nx].org = child;
+            placed++;
           }
+          if (placed > 0) newOrg.reproCooldown = this.reproCooldown;
         }
       }
     }
@@ -171,7 +181,7 @@ export class WorldSpecies {
       age: 0,
       maxAge: Math.max(20, Math.round(jitter(parent.maxAge, 10))),
       tempOpt: Math.max(0, Math.min(1, jitter(parent.tempOpt, 0.1))),
-      mutationRate: parent.mutationRate,
+      mutationRate: Math.max(0.001, Math.min(0.3, jitter(parent.mutationRate, 0.5))),
       reproThreshold: Math.max(0.5, jitter(parent.reproThreshold, 0.3)),
       reproCooldown: 0,
       predationIndex: Math.max(
@@ -327,6 +337,11 @@ export class WorldSpecies {
     this.updateOrganisms();
   }
 
+  getActualZoneTemp(zone: ZoneId): number {
+    const seasonal = this.seasonAmplitude * Math.sin(2 * Math.PI * this.tickCount / this.seasonPeriod);
+    return this.zoneBaseTemps[zone] + seasonal;
+  }
+
   private updateEnvironment() {
     for (let y = 0; y < GRID_HEIGHT; y++) {
       for (let x = 0; x < GRID_WIDTH; x++) {
@@ -336,7 +351,7 @@ export class WorldSpecies {
           cell.env.lastEatenTicks -= 1;
         }
 
-        cell.env.temperature = this.baseTempForZone(cell.env.zone);
+        cell.env.temperature = this.getActualZoneTemp(cell.env.zone);
 
         const regen = this.zoneRegen[cell.env.zone];
         cell.env.nutrient = Math.min(1, cell.env.nutrient + regen);

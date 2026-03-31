@@ -349,7 +349,7 @@ function draw() {
     const canvasTop = INFO_BAR_HEIGHT + rowStart * CELL_SIZE;
     const canvasBottom = INFO_BAR_HEIGHT + rowEnd * CELL_SIZE;
     const midY = (canvasTop + canvasBottom) / 2;
-    const tempC = (world.zoneBaseTemps[z] * 50).toFixed(1);
+    const tempC = (world.getActualZoneTemp(z as 0|1|2) * 50).toFixed(1);
     const label = `Z${z}: ${tempC}ºC`;
 
     const padding = 4;

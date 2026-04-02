@@ -1,6 +1,7 @@
 // src/main_species.ts
 import { WorldSpecies } from "./world_species";
 import { GRID_WIDTH, GRID_HEIGHT } from "./types";
+import { RunTracker } from "./tracker";
 
 const canvas = document.getElementById("world") as HTMLCanvasElement;
 const ctx = canvas.getContext("2d")!;
@@ -51,6 +52,7 @@ const CELL_SIZE = canvas.width / GRID_WIDTH;
 const INFO_BAR_HEIGHT = 40;
 
 let world: WorldSpecies;
+let tracker: RunTracker | null = null;
 let lastTime = 0;
 let accumulator = 0;
 let tickDelay = Number(tickDelayInput.value);
@@ -186,11 +188,8 @@ function attachListeners() {
     isRunning = false;
   });
 
-  restartBtn.addEventListener("click", () => {
-    world = new WorldSpecies();
-    accumulator = 0;
-    const initialM = Number(speciesMInput.value) / 100;
-    world.seedSingleAncestor(initialM);
+  restartBtn.addEventListener("click", async () => {
+    await initWorld();
     updateUIAndDraw();
   });
 
@@ -425,7 +424,7 @@ function updateUIAndDraw() {
   speciesListDiv.innerHTML = liveSpecies.map(sp =>
     `<div style="display:flex;align-items:center;gap:5px;margin:2px 0">` +
     `<span style="display:inline-block;width:10px;height:10px;background:${sp.color};flex-shrink:0;border-radius:2px"></span>` +
-    `<span>#${sp.id}(${sp.count}) &nbsp;T:${(sp.tempOpt * 50).toFixed(1)}ºC &nbsp;A:${sp.maxAge} &nbsp;P:${sp.predationIndex.toFixed(2)}</span>` +
+    `<span>#${sp.id}->${sp.count} &nbsp;T:${(sp.tempOpt * 50).toFixed(1)}ºC &nbsp;A:${sp.maxAge} &nbsp;P:${sp.predationIndex.toFixed(2)}</span>` +
     `</div>`
   ).join('');
 
@@ -459,19 +458,37 @@ function loop(timestamp: number) {
       world.step();
       accumulator -= tickDelay;
       updateUIAndDraw();
+      if (tracker) {
+        tracker.onTick().then(result => {
+          if (result !== "continue") {
+            isRunning = false;
+            const reason = result === "end_max" ? "max_ticks"
+              : result === "end_extinction" ? "extinction"
+              : "dominance";
+            tracker!.endRun(reason);
+          }
+        });
+      }
     }
   }
 }
 
-window.addEventListener("DOMContentLoaded", () => {
+async function initWorld() {
+  if (tracker) await tracker.endRun("manual");
   world = new WorldSpecies();
   accumulator = 0;
-  tickDelay = Number(tickDelayInput.value);
   isRunning = false;
   lastTime = performance.now();
-
   const initialM = Number(speciesMInput.value) / 100;
   world.seedSingleAncestor(initialM);
+  tracker = new RunTracker(world);
+  await tracker.startRun();
+}
+
+window.addEventListener("DOMContentLoaded", async () => {
+  tickDelay = Number(tickDelayInput.value);
+
+  await initWorld();
 
   attachListeners();
 

@@ -23,7 +23,13 @@ export class WorldSpecies {
 
   // Especies
   speciesCounter = 1;
-  speciesMap = new Map<number, { color: string; tempOpt: number; maxAge: number; predationIndex: number }>();
+  speciesMap = new Map<number, { color: string; tempOpt: number; maxAge: number; predationIndex: number; mutationRate: number; parentSpeciesId: number | null }>();
+
+  onNewSpecies?: (event: {
+    speciesId: number; parentSpeciesId: number | null;
+    founderTraits: { tempOpt: number; maxAge: number; predationIndex: number; mutationRate: number };
+    zone: number; x: number; y: number;
+  }) => void;
 
   constructor() {
     this.grid = [];
@@ -44,7 +50,7 @@ export class WorldSpecies {
     const cell = this.grid[y][x];
     const tempOpt = this.baseTempForZone(cell.env.zone);
 
-    const baseSpecies = this.createSpecies({ tempOpt, maxAge: 80, predationIndex: 0.5 });
+    const baseSpecies = this.createSpecies({ tempOpt, maxAge: 80, predationIndex: 0.5, mutationRate: initialMutationRate, parentSpeciesId: null });
 
     cell.org = {
       energy: 1,
@@ -157,7 +163,7 @@ export class WorldSpecies {
             const pos = this.findEmptyNeighbor(x, y, newGrid);
             if (!pos) break;
             const [nx, ny] = pos;
-            const child = this.mutateOrganism(newOrg);
+            const child = this.mutateOrganism(newOrg, nx, ny);
             child.energy = this.reproChildEnergy;
             newOrg.energy -= this.reproCost;
             newGrid[ny][nx].org = child;
@@ -171,7 +177,7 @@ export class WorldSpecies {
     this.grid = newGrid;
   }
 
-  private mutateOrganism(parent: OrganismSpecies): OrganismSpecies {
+  private mutateOrganism(parent: OrganismSpecies, x: number, y: number): OrganismSpecies {
     const r = parent.mutationRate;
     const jitter = (v: number, scale: number) =>
       v + (Math.random() * 2 - 1) * scale * r;
@@ -181,8 +187,8 @@ export class WorldSpecies {
       age: 0,
       maxAge: Math.max(20, Math.round(jitter(parent.maxAge, 10))),
       tempOpt: Math.max(0, Math.min(1, jitter(parent.tempOpt, 0.1))),
-      mutationRate: Math.max(0.001, Math.min(0.3, jitter(parent.mutationRate, 0.5))),
-      reproThreshold: Math.max(0.5, jitter(parent.reproThreshold, 0.3)),
+      mutationRate: Math.max(0.001, Math.min(0.3, jitter(parent.mutationRate, 0.6))),
+      reproThreshold: Math.max(0.5, jitter(parent.reproThreshold, 0.4)),
       reproCooldown: 0,
       predationIndex: Math.max(
         0,
@@ -193,13 +199,22 @@ export class WorldSpecies {
     };
 
     if (this.shouldSpeciate(parent, child)) {
-      const newSpeciesId = this.createSpecies({ tempOpt: child.tempOpt, maxAge: child.maxAge, predationIndex: child.predationIndex });
+      const newSpeciesId = this.createSpecies({ tempOpt: child.tempOpt, maxAge: child.maxAge, predationIndex: child.predationIndex, mutationRate: child.mutationRate, parentSpeciesId: parent.speciesId });
       child = {
         ...child,
         speciesId: newSpeciesId,
         founderId: newSpeciesId,
         speciationMarkerTicks: 10,
       };
+      const zone = this.zoneForY(y);
+      this.onNewSpecies?.({
+        speciesId: newSpeciesId,
+        parentSpeciesId: parent.speciesId,
+        founderTraits: { tempOpt: child.tempOpt, maxAge: child.maxAge, predationIndex: child.predationIndex, mutationRate: child.mutationRate },
+        zone,
+        x,
+        y,
+      });
     }
 
     return child;
@@ -306,7 +321,7 @@ export class WorldSpecies {
     return this.zoneBaseTemps[zone];
   }
 
-  private createSpecies(traits: { tempOpt: number; maxAge: number; predationIndex: number }): number {
+  private createSpecies(traits: { tempOpt: number; maxAge: number; predationIndex: number; mutationRate: number; parentSpeciesId: number | null }): number {
     const id = this.speciesCounter++;
     const hue = (id * 157) % 360;
     const color = `hsl(${hue}, 90%, 50%)`;
